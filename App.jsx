@@ -7,9 +7,9 @@ import {
 } from 'lucide-react';
 
 /**
- * Vaillant Premium Monitor - V5.3
- * Update: Überschrift "Leistung in Watt" mit Symbol im Kachelstil hinzugefügt
- * Feature: Optimierte Abtauerkennung & Datums-Parsing
+ * Vaillant Premium Monitor - V5.4
+ * Update: Deutlich größere Schriftarten im Cursor-Tooltip für bessere Lesbarkeit auf Smartphones
+ * Feature: Optimierte Abtauerkennung & Diagramm-Überschrift
  */
 
 const App = () => {
@@ -281,7 +281,7 @@ const App = () => {
                 <Calendar size={12} className="text-cyan-500" /> 
                 {currentWindowData.length > 0 ? currentWindowData[0].time.toLocaleDateString('de-DE') : '--'}
                 <div className="w-1 h-1 bg-cyan-500 rounded-full animate-pulse"></div>
-                Monitor V5.3
+                Monitor V5.4
               </div>
             </div>
           </div>
@@ -317,7 +317,6 @@ const App = () => {
           {/* HEADER INNERHALB DES GRAPH-CONTAINERS */}
           <div className="px-3 sm:px-10 pt-3 sm:pt-10 flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/5 pb-3 sm:pb-6 gap-3">
             
-            {/* NEUE ÜBERSCHRIFT IM KACHELSTIL */}
             <div className="flex items-center gap-3">
               <div className="p-2 sm:p-3 bg-slate-900/60 rounded-xl border border-white/10 text-cyan-400 shadow-inner">
                 <Zap size={20} />
@@ -407,16 +406,23 @@ const App = () => {
                   <g>
                     <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={chartMetrics.margin.top} y2={chartMetrics.height - chartMetrics.margin.bottom} stroke="white" strokeOpacity="0.2" strokeWidth="1" />
                     <circle cx={hoveredPoint.x} cy={hoveredPoint.y} r="8" fill="#22d3ee" stroke="#020617" strokeWidth="3" />
-                    <foreignObject x={hoveredPoint.x > chartMetrics.width - 160 ? hoveredPoint.x - 150 : hoveredPoint.x + 15} y={hoveredPoint.y - 95} width="140" height="95">
-                      <div className="bg-slate-950/95 border border-white/10 p-2.5 rounded-xl shadow-2xl backdrop-blur-xl">
-                        <div className="text-[8px] text-slate-400 font-black uppercase tracking-tighter mb-0.5">
+                    
+                    {/* OPTIMIERTER TOOLTIP: Größerer Container und größere Schriften */}
+                    <foreignObject 
+                      x={hoveredPoint.x > chartMetrics.width - 200 ? hoveredPoint.x - 190 : hoveredPoint.x + 20} 
+                      y={hoveredPoint.y - 110} 
+                      width="180" 
+                      height="110"
+                    >
+                      <div className="bg-slate-950/95 border border-white/10 p-3.5 rounded-2xl shadow-2xl backdrop-blur-xl">
+                        <div className="text-xs text-slate-400 font-black uppercase tracking-wider mb-0.5">
                           {hoveredPoint.data.time.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
                         </div>
-                        <div className="text-[10px] text-slate-500 font-black uppercase tracking-tighter mb-1">
+                        <div className="text-sm text-slate-500 font-black uppercase tracking-wider mb-2">
                           {hoveredPoint.data.time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} Uhr
                         </div>
-                        <div className="text-xl font-black text-white leading-none">
-                          {hoveredPoint.data.value.toFixed(0)}<span className="text-cyan-400 text-xs ml-1 font-normal">W</span>
+                        <div className="text-3xl font-black text-white leading-none tracking-tighter">
+                          {hoveredPoint.data.value.toFixed(0)}<span className="text-cyan-400 text-sm ml-1 font-bold">W</span>
                         </div>
                       </div>
                     </foreignObject>
@@ -439,7 +445,7 @@ const App = () => {
 
           <div className="px-3 sm:px-10 py-1 sm:py-4 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-1.5 sm:gap-4 text-center sm:text-left">
              <div className="flex items-center gap-2 text-[7px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest text-left">
-                <Info size={12} className="text-cyan-500 shrink-0"/> Design-Update: Neue Diagramm-Überschrift mit Symbol im Premium-Look.
+                <Info size={12} className="text-cyan-500 shrink-0"/> Sichtbarkeits-Update: Größere Schriften im Tooltip für mobile Nutzung.
              </div>
              <div className="text-[8px] sm:text-xs font-black text-cyan-400 bg-cyan-400/5 px-2 py-0.5 rounded-full border border-cyan-400/20">
                {timeRangeLabel}
@@ -448,7 +454,7 @@ const App = () => {
         </div>
 
         <footer className="text-center pb-6 opacity-30">
-           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v5.3 • Premium Monitor</p>
+           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v5.4 • Premium Monitor</p>
         </footer>
       </div>
     </div>
