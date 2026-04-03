@@ -415,10 +415,10 @@ const App = () => {
                       height="110"
                     >
                       <div className="bg-slate-950/95 border border-white/10 p-3.5 rounded-2xl shadow-2xl backdrop-blur-xl">
-                        <div className="text-xs text-slate-400 font-black uppercase tracking-wider mb-0.5">
+                        <div className="text-xs text-slate-500 font-black uppercase tracking-wider mb-0.5">
                           {hoveredPoint.data.time.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
                         </div>
-                        <div className="text-sm text-slate-500 font-black uppercase tracking-wider mb-2">
+                        <div className="text-sm text-slate-600 font-black uppercase tracking-wider mb-2">
                           {hoveredPoint.data.time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} Uhr
                         </div>
                         <div className="text-3xl font-black text-white leading-none tracking-tighter">
