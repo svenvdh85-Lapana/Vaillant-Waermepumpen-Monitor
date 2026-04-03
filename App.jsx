@@ -7,9 +7,9 @@ import {
 } from 'lucide-react';
 
 /**
- * Vaillant Premium Monitor - V5.4
- * Update: Deutlich größere Schriftarten im Cursor-Tooltip für bessere Lesbarkeit auf Smartphones
- * Feature: Optimierte Abtauerkennung & Diagramm-Überschrift
+ * Vaillant Premium Monitor - V5.7
+ * Update: Zeitraum-Label links neben die Nav-Buttons verschoben (unter Icons)
+ * Feature: Optimierte Abtauerkennung & Mobile-Friendly Tooltip
  */
 
 const App = () => {
@@ -281,7 +281,7 @@ const App = () => {
                 <Calendar size={12} className="text-cyan-500" /> 
                 {currentWindowData.length > 0 ? currentWindowData[0].time.toLocaleDateString('de-DE') : '--'}
                 <div className="w-1 h-1 bg-cyan-500 rounded-full animate-pulse"></div>
-                Monitor V5.4
+                Monitor V5.7
               </div>
             </div>
           </div>
@@ -314,7 +314,6 @@ const App = () => {
 
         <div className="bg-slate-900/40 backdrop-blur-xl rounded-[1.2rem] sm:rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden mb-6 sm:mb-10">
           
-          {/* HEADER INNERHALB DES GRAPH-CONTAINERS */}
           <div className="px-3 sm:px-10 pt-3 sm:pt-10 flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/5 pb-3 sm:pb-6 gap-3">
             
             <div className="flex items-center gap-3">
@@ -332,7 +331,8 @@ const App = () => {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 w-full sm:w-auto">
+            <div className="flex flex-col items-end gap-3 w-full sm:w-auto">
+              {/* Zeile 1: Sonne/Mond Icons */}
               <div className="flex items-center gap-4 sm:gap-8 overflow-x-auto no-scrollbar pb-1">
                 {timeIcons.map((item, idx) => (
                   <div key={idx} className="flex flex-col items-center gap-1 min-w-[30px]">
@@ -341,19 +341,27 @@ const App = () => {
                   </div>
                 ))}
               </div>
-              <div className="flex gap-2 justify-end">
-                  <NavBtn 
-                    onClick={() => { setViewIndex(v => v + 1); setZoom(1); setPanOffset(0); }} 
-                    icon={<ChevronLeft size={18}/>} 
-                    label="-24h" 
-                    active={hasMoreHistory}
-                  />
-                  <NavBtn 
-                    onClick={() => { setViewIndex(v => v - 1); setZoom(1); setPanOffset(0); }} 
-                    icon={<ChevronRight size={18}/>} 
-                    label="+24h" 
-                    active={viewIndex > 0} 
-                  />
+              
+              {/* Zeile 2: Zeitraum links, Buttons rechts */}
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                  {/* Zeitraum-Label (Versteckt auf kleinsten Displays, falls zu eng) */}
+                  <div className="text-[8px] sm:text-[10px] font-black text-cyan-400 bg-cyan-400/5 px-2.5 py-1.5 rounded-lg border border-cyan-400/20 shadow-sm uppercase tracking-wider">
+                    {timeRangeLabel}
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                      <NavBtn 
+                        onClick={() => { setViewIndex(v => v + 1); setZoom(1); setPanOffset(0); }} 
+                        icon={<ChevronLeft size={18}/>} 
+                        label="-24h" 
+                        active={hasMoreHistory}
+                      />
+                      <NavBtn 
+                        onClick={() => { setViewIndex(v => v - 1); setZoom(1); setPanOffset(0); }} 
+                        icon={<ChevronRight size={18}/>} 
+                        label="+24h" 
+                        active={viewIndex > 0} 
+                      />
+                  </div>
               </div>
             </div>
           </div>
@@ -372,7 +380,7 @@ const App = () => {
             {chartMetrics && (
               <svg viewBox={`0 0 ${chartMetrics.width} ${chartMetrics.height}`} className="w-full h-full">
                 <defs>
-                  <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="areaGrad" x1="0" x2="0" y1="0" y2="1">
                     <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.4" />
                     <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
                   </linearGradient>
@@ -407,7 +415,6 @@ const App = () => {
                     <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={chartMetrics.margin.top} y2={chartMetrics.height - chartMetrics.margin.bottom} stroke="white" strokeOpacity="0.2" strokeWidth="1" />
                     <circle cx={hoveredPoint.x} cy={hoveredPoint.y} r="8" fill="#22d3ee" stroke="#020617" strokeWidth="3" />
                     
-                    {/* OPTIMIERTER TOOLTIP: Größerer Container und größere Schriften */}
                     <foreignObject 
                       x={hoveredPoint.x > chartMetrics.width - 200 ? hoveredPoint.x - 190 : hoveredPoint.x + 20} 
                       y={hoveredPoint.y - 110} 
@@ -415,15 +422,19 @@ const App = () => {
                       height="110"
                     >
                       <div className="bg-slate-950/95 border border-white/10 p-3.5 rounded-2xl shadow-2xl backdrop-blur-xl">
-                        <div className="text-xs text-slate-500 font-black uppercase tracking-wider mb-0.5">
+                        
+                        <div className="text-xs text-slate-400 font-black uppercase tracking-wider mb-0.5">
                           {hoveredPoint.data.time.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}
                         </div>
-                        <div className="text-sm text-slate-600 font-black uppercase tracking-wider mb-2">
+                        
+                        <div className="text-sm text-slate-500 font-black uppercase tracking-wider mb-2">
                           {hoveredPoint.data.time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} Uhr
                         </div>
+                        
                         <div className="text-3xl font-black text-white leading-none tracking-tighter">
                           {hoveredPoint.data.value.toFixed(0)}<span className="text-cyan-400 text-sm ml-1 font-bold">W</span>
                         </div>
+
                       </div>
                     </foreignObject>
                   </g>
@@ -445,16 +456,13 @@ const App = () => {
 
           <div className="px-3 sm:px-10 py-1 sm:py-4 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-1.5 sm:gap-4 text-center sm:text-left">
              <div className="flex items-center gap-2 text-[7px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest text-left">
-                <Info size={12} className="text-cyan-500 shrink-0"/> Sichtbarkeits-Update: Größere Schriften im Tooltip für mobile Nutzung.
-             </div>
-             <div className="text-[8px] sm:text-xs font-black text-cyan-400 bg-cyan-400/5 px-2 py-0.5 rounded-full border border-cyan-400/20">
-               {timeRangeLabel}
+                <Info size={12} className="text-cyan-500 shrink-0"/> Layout-Update: Datumsbereich wurde links neben die Nav-Buttons verschoben.
              </div>
           </div>
         </div>
 
         <footer className="text-center pb-6 opacity-30">
-           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v5.4 • Premium Monitor</p>
+           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v5.7 • Premium Monitor</p>
         </footer>
       </div>
     </div>
