@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 
 /**
- * Vaillant Premium Monitor - V4.7
- * Update: Robustere Abtauerkennung & Fix der SVG-Gradienten
+ * Vaillant Premium Monitor - V4.8
+ * Update: Mustererkennung basierend auf realem Abtau-Datenlog (Drop -> Ramp -> Peak)
  */
 
 const App = () => {
@@ -78,20 +78,19 @@ const App = () => {
     return allData.slice(start, end);
   }, [allData, viewIndex]);
 
-  // --- Optimierte Zyklen-Analyse (Robustere Abtauerkennung) ---
+  // --- Optimierte Zyklen-Analyse basierend auf dem neuen Muster ---
   const cycleStats = useMemo(() => {
     const stats = { starts: 0, defrosts: 0, defrostIndices: [] };
-    if (currentWindowData.length < 5) return stats;
+    if (currentWindowData.length < 10) return stats;
 
     let idleMin = 0; 
     let compressorActive = false;
 
-    for (let i = 2; i < currentWindowData.length; i++) {
+    for (let i = 1; i < currentWindowData.length; i++) {
       const current = currentWindowData[i].value;
       const prev = currentWindowData[i - 1].value;
-      const prevPrev = currentWindowData[i - 2].value;
 
-      // 1. Reguläre Verdichterstarts
+      // 1. REGULÄRE VERDICHTERSTARTS
       if (current < 100) {
         idleMin++; 
         if (idleMin >= 15) compressorActive = false;
@@ -103,21 +102,30 @@ const App = () => {
         idleMin = 0;
       }
 
-      // 2. FLEXIBLE ABTAUERKENNUNG
-      // Bedingung A: Massiver Peak (> 1700W)
-      // Bedingung B: Vorheriger Einbruch innerhalb der letzten 2 Datenpunkte (< 550W)
-      // Bedingung C: Der Sprung muss signifikant sein (> 1000W Differenz)
-      
-      const isMassivePeak = current > 1700;
-      const hadRecentDrop = prev < 550 || prevPrev < 550;
-      const isSignificantJump = (current - prev > 1000) || (current - prevPrev > 1000);
+      // 2. MUSTERERKENNUNG ABTAUEN (Look-Back Algorithmus)
+      // Wir erkennen das Abtauen am PEAK (> 2200W) und prüfen, ob davor ein Drop war.
+      if (current > 2200) {
+        let foundDropBefore = false;
+        // Wir schauen bis zu 10 Datenpunkte (ca. 10 Min) zurück
+        for (let j = 1; j <= 10; j++) {
+          if (i - j < 1) break;
+          const valAtJ = currentWindowData[i - j].value;
+          const valBeforeJ = currentWindowData[i - j - 1].value;
+          
+          // Einbruch erkannt: Wert < 450W und davor war normaler Heizbetrieb > 600W
+          if (valAtJ < 450 && valBeforeJ > 600) {
+            foundDropBefore = true;
+            break;
+          }
+        }
 
-      if (isMassivePeak && hadRecentDrop && isSignificantJump) {
-        // Dubletten-Schutz: Nicht zwei Peaks innerhalb von 5 Minuten zählen
-        const lastIndex = stats.defrostIndices[stats.defrostIndices.length - 1];
-        if (!lastIndex || (currentWindowData[i].id - lastIndex > 5)) {
-          stats.defrosts++;
-          stats.defrostIndices.push(currentWindowData[i].id);
+        if (foundDropBefore) {
+          // Dubletten-Schutz: Verhindert Mehrfachzählung während der Plateau-Phase
+          const lastIndex = stats.defrostIndices[stats.defrostIndices.length - 1];
+          if (!lastIndex || (currentWindowData[i].id - lastIndex > 15)) {
+            stats.defrosts++;
+            stats.defrostIndices.push(currentWindowData[i].id);
+          }
         }
       }
     }
@@ -127,7 +135,7 @@ const App = () => {
   const systemStatus = useMemo(() => {
     if (allData.length === 0) return { label: "Offline", color: "rose" };
     const lastValue = allData[allData.length - 1].value;
-    if (lastValue > 1700) return { label: "Abtauen", color: "orange" };
+    if (lastValue > 2200) return { label: "Abtauen", color: "orange" };
     if (lastValue > 200) return { label: "Heizen", color: "emerald" };
     if (lastValue < 100) return { label: "Standby", color: "cyan" };
     return { label: "Normal", color: "emerald" };
@@ -152,7 +160,6 @@ const App = () => {
     
     const points = visibleData.map((d, i) => ({ x: getX(i), y: getY(d.value), data: d }));
     
-    // Markierung der Abtauvorgänge im Chart
     const defrostRects = [];
     visibleData.forEach((d, i) => {
       if (cycleStats.defrostIndices.includes(d.id)) {
@@ -261,7 +268,7 @@ const App = () => {
                 <Calendar size={12} className="text-cyan-500" /> 
                 {currentWindowData.length > 0 ? currentWindowData[0].time.toLocaleDateString() : '--'}
                 <div className="w-1 h-1 bg-cyan-500 rounded-full animate-pulse"></div>
-                Monitor V4.7
+                Monitor V4.8
               </div>
             </div>
           </div>
@@ -341,7 +348,7 @@ const App = () => {
                 ))}
 
                 {chartMetrics.defrostRects.map((r, idx) => (
-                    <rect key={idx} x={r.x} y={chartMetrics.margin.top} width={r.width} height={chartMetrics.cH} fill="#f97316" fillOpacity="0.35" filter="url(#glow)" />
+                    <rect key={idx} x={r.x} y={chartMetrics.margin.top} width={r.width} height={chartMetrics.cH} fill="#f97316" fillOpacity="0.4" filter="url(#glow)" />
                 ))}
 
                 <path d={chartMetrics.areaD} fill="url(#areaGrad)" />
@@ -381,7 +388,7 @@ const App = () => {
 
           <div className="px-3 sm:px-10 py-1 sm:py-4 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-1.5 sm:gap-4 text-center sm:text-left">
              <div className="flex items-center gap-2 text-[7px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest">
-                <Info size={12} className="text-cyan-500 shrink-0"/> Optimierte Erkennung: Orange Balken markieren Abtau-Peaks
+                <Info size={12} className="text-cyan-500 shrink-0"/> Muster-Erkennung: Peak {">"} 2200W nach Einbruch {">"} 450W
              </div>
              <div className="text-[8px] sm:text-xs font-black text-cyan-400 bg-cyan-400/5 px-2 py-0.5 rounded-full border border-cyan-400/20">
                {timeRangeLabel}
@@ -390,7 +397,7 @@ const App = () => {
         </div>
 
         <footer className="text-center pb-6 opacity-30">
-           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v4.7 • Premium Monitor</p>
+           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v4.8 • Premium Monitor</p>
         </footer>
       </div>
     </div>
