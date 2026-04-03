@@ -193,7 +193,7 @@ const App = () => {
             </div>
             <div className="flex-1">
               <h1 className="text-xl sm:text-4xl font-black tracking-tight text-white uppercase italic">
-                Vaillant <span className="text-cyan-400 not-italic">Live</span>
+                Vaillant <span className="text-cyan-400 not-italic">Arotherm Plus 75/6</span>
               </h1>
               <div className="flex items-center gap-2 text-slate-400 text-[10px] sm:text-sm mt-0.5 font-bold">
                 <Calendar size={12} className="text-cyan-500" /> 
