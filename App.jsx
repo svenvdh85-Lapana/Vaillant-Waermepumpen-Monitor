@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 
 /**
- * Vaillant Premium Monitor - V3.7
- * Update: Status-Logik (Heizen/Standby) und Kachel-Anordnung angepasst.
+ * Vaillant Premium Monitor - V3.8
+ * Layout-Update: Kompakteres Design für Mobile (Abstände unter dem Graphen reduziert).
  */
 
 const App = () => {
@@ -110,7 +110,7 @@ const App = () => {
   const chartMetrics = useMemo(() => {
     if (currentWindowData.length === 0) return null;
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
-    const margin = { top: 60, right: 25, bottom: 50, left: isMobile ? 55 : 80 };
+    const margin = { top: 60, right: 25, bottom: 40, left: isMobile ? 55 : 80 };
     const width = 1000; 
     const height = 500;
     const cW = width - margin.left - margin.right;
@@ -185,7 +185,7 @@ const App = () => {
       <div className="max-w-7xl mx-auto relative z-10">
         
         {/* Header */}
-        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6">
+        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 sm:mb-8 gap-6">
           <div className="flex items-center gap-4 sm:gap-6 w-full lg:w-auto">
             <div className="p-3 sm:p-4 bg-gradient-to-tr from-cyan-600 to-blue-700 rounded-xl sm:rounded-2xl shadow-xl border border-cyan-400/20">
               <Zap className="text-white fill-white/10" size={28} />
@@ -204,8 +204,8 @@ const App = () => {
           </div>
         </header>
 
-        {/* Info Cards - Swapped Order: Status first, Peak last */}
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+        {/* Info Cards */}
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
           <StatCard title="Status" value={systemStatus.label} unit="" icon={<Activity className={`text-${systemStatus.color}-400`} />} color={systemStatus.color} isStatus trend="Live" />
           <StatCard title="Ø-Leistung" value={chartMetrics ? chartMetrics.avg : 0} unit="W" icon={<BarChart3 className="text-amber-400" />} color="amber" />
           <StatCard title="Takte (24h)" value={cycleStats} unit="Starts" icon={<RotateCcw className="text-cyan-400" />} color="cyan" />
@@ -213,7 +213,7 @@ const App = () => {
         </section>
 
         {/* Main Chart Card */}
-        <div className="bg-slate-900/40 backdrop-blur-xl rounded-[1.5rem] sm:rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden mb-10">
+        <div className="bg-slate-900/40 backdrop-blur-xl rounded-[1.5rem] sm:rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden mb-6 sm:mb-10">
           
           {/* Top Toolbar (Zeitnavigation) */}
           <div className="px-4 sm:px-10 pt-4 sm:pt-10 flex flex-col sm:flex-row justify-between items-center border-b border-white/5 pb-4 sm:pb-6 gap-4">
@@ -233,7 +233,7 @@ const App = () => {
           </div>
 
           <div 
-            className="w-full h-[350px] sm:h-[550px] relative cursor-crosshair touch-none select-none" 
+            className="w-full h-[320px] sm:h-[550px] relative cursor-crosshair touch-none select-none" 
             ref={containerRef}
             onMouseDown={(e) => { isDragging.current = true; lastX.current = e.clientX; }}
             onMouseMove={handleMouseMove}
@@ -289,31 +289,31 @@ const App = () => {
             )}
           </div>
           
-          {/* Untere Aktionsleiste (Refresh, Reset, Zoom) */}
-          <div className="px-4 sm:px-10 py-5 bg-slate-800/20 border-t border-white/5 flex flex-wrap gap-3 justify-center sm:justify-between items-center">
+          {/* Untere Aktionsleiste (Refresh, Reset, Zoom) - Abstände reduziert (py-2.5) */}
+          <div className="px-4 sm:px-10 py-2.5 sm:py-5 bg-slate-800/20 border-t border-white/5 flex flex-wrap gap-2 sm:gap-3 justify-center sm:justify-between items-center">
              <div className="flex gap-2">
-               <HeaderBtn onClick={fetchSheetData} icon={<RefreshCcw size={16} className={loading ? 'animate-spin' : ''}/>} label="Refresh" />
-               <HeaderBtn onClick={() => { setZoom(1); setPanOffset(0); }} icon={<Maximize size={16}/>} label="Reset" primary />
+               <HeaderBtn onClick={fetchSheetData} icon={<RefreshCcw size={15} className={loading ? 'animate-spin' : ''}/>} label="Refresh" />
+               <HeaderBtn onClick={() => { setZoom(1); setPanOffset(0); }} icon={<Maximize size={15}/>} label="Reset" primary />
              </div>
              <div className="flex gap-2">
-               <NavBtn onClick={() => setZoom(z => Math.min(30, z * 1.5))} icon={<ZoomIn size={18}/>} label="Zoom +" />
-               <NavBtn onClick={() => setZoom(z => Math.max(1, z * 0.7))} icon={<ZoomOut size={18}/>} label="Zoom -" />
+               <NavBtn onClick={() => setZoom(z => Math.min(30, z * 1.5))} icon={<ZoomIn size={16}/>} label="Zoom +" />
+               <NavBtn onClick={() => setZoom(z => Math.max(1, z * 0.7))} icon={<ZoomOut size={16}/>} label="Zoom -" />
              </div>
           </div>
 
-          {/* Info Footer */}
-          <div className="px-4 sm:px-10 py-4 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-4 text-center sm:text-left">
+          {/* Info Footer - Abstände reduziert (py-2) */}
+          <div className="px-4 sm:px-10 py-2 sm:py-4 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-2 sm:gap-4 text-center sm:text-left">
              <div className="flex items-center gap-2 text-[8px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest">
-                <Info size={16} className="text-cyan-500 shrink-0"/> Ziehen zum Bewegen • Pinch zum Zoomen
+                <Info size={14} className="text-cyan-500 shrink-0"/> Ziehen zum Bewegen • Pinch zum Zoomen
              </div>
-             <div className="text-[9px] sm:text-xs font-black text-cyan-400 bg-cyan-400/10 px-3 py-1 rounded-full border border-cyan-400/20">
+             <div className="text-[9px] sm:text-xs font-black text-cyan-400 bg-cyan-400/10 px-3 py-0.5 sm:py-1 rounded-full border border-cyan-400/20">
                {timeRangeLabel}
              </div>
           </div>
         </div>
 
-        <footer className="text-center pb-12 opacity-30">
-           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Vaillant Dashboard v3.7 • Premium Live</p>
+        <footer className="text-center pb-8 opacity-30">
+           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Vaillant Dashboard v3.8 • Premium Live</p>
         </footer>
       </div>
     </div>
@@ -328,30 +328,30 @@ const StatCard = ({ title, value, unit, icon, color, isStatus, trend }) => {
     emerald: "from-emerald-500/10 to-emerald-950/5 border-emerald-500/20"
   };
   return (
-    <div className={`relative overflow-hidden bg-gradient-to-br ${colors[color]} border p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] group transition-all shadow-xl`}>
-      <div className="flex justify-between items-start mb-3 sm:mb-4">
-        <div className="p-2.5 sm:p-3 bg-slate-900/60 rounded-xl border border-white/5">{icon}</div>
-        {isStatus && <div className={`flex items-center gap-1.5 bg-${color}-500/20 text-${color}-400 px-2.5 py-1 rounded-full text-[9px] font-black uppercase border border-${color}-500/20 tracking-tighter`}>{value}</div>}
+    <div className={`relative overflow-hidden bg-gradient-to-br ${colors[color]} border p-3.5 sm:p-6 rounded-[1.2rem] sm:rounded-[2rem] group transition-all shadow-xl`}>
+      <div className="flex justify-between items-start mb-2 sm:mb-4">
+        <div className="p-2 sm:p-3 bg-slate-900/60 rounded-xl border border-white/5">{icon}</div>
+        {isStatus && <div className={`flex items-center gap-1 bg-${color}-500/20 text-${color}-400 px-2 py-0.5 rounded-full text-[8px] font-black uppercase border border-${color}-500/20 tracking-tighter`}>{value}</div>}
       </div>
-      <p className="text-slate-500 text-[10px] sm:text-xs font-black uppercase tracking-wider mb-1 truncate">{title}</p>
-      <div className="flex items-baseline gap-1.5 sm:gap-2">
-        <span className="text-xl sm:text-4xl font-black text-white tracking-tighter">
+      <p className="text-slate-500 text-[9px] sm:text-xs font-black uppercase tracking-wider mb-0.5 truncate">{title}</p>
+      <div className="flex items-baseline gap-1 sm:gap-2">
+        <span className="text-lg sm:text-4xl font-black text-white tracking-tighter">
           {typeof value === 'number' ? value.toLocaleString('de-DE', { maximumFractionDigits: 0 }) : value}
         </span>
-        <span className="text-slate-600 font-bold text-[10px] sm:text-sm uppercase tracking-tighter">{unit}</span>
+        <span className="text-slate-600 font-bold text-[9px] sm:text-sm uppercase tracking-tighter">{unit}</span>
       </div>
     </div>
   );
 };
 
 const HeaderBtn = ({ onClick, icon, label, primary }) => (
-  <button onClick={onClick} className={`flex items-center justify-center gap-2 px-4 py-2.5 sm:px-6 sm:py-3 rounded-xl sm:rounded-2xl font-black text-[11px] sm:text-xs uppercase tracking-widest transition-all active:scale-95 border ${primary ? 'bg-cyan-600 border-cyan-400 text-white shadow-lg' : 'bg-slate-900/60 border-white/10 text-slate-400'}`}>
+  <button onClick={onClick} className={`flex items-center justify-center gap-1.5 px-3 py-2 sm:px-6 sm:py-3 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-xs uppercase tracking-widest transition-all active:scale-95 border ${primary ? 'bg-cyan-600 border-cyan-400 text-white shadow-lg' : 'bg-slate-900/60 border-white/10 text-slate-400'}`}>
     {icon} <span>{label}</span>
   </button>
 );
 
 const NavBtn = ({ onClick, icon, label, active = true }) => (
-  <button onClick={onClick} disabled={!active} className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-[11px] uppercase tracking-widest transition-all border ${active ? 'bg-slate-800 border-white/10 text-white hover:bg-slate-700 active:scale-95' : 'opacity-20 border-transparent text-slate-600'}`}>
+  <button onClick={onClick} disabled={!active} className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-2 sm:px-5 sm:py-3 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-[11px] uppercase tracking-widest transition-all border ${active ? 'bg-slate-800 border-white/10 text-white hover:bg-slate-700 active:scale-95' : 'opacity-20 border-transparent text-slate-600'}`}>
     {icon} <span>{label}</span>
   </button>
 );
