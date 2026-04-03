@@ -7,9 +7,8 @@ import {
 } from 'lucide-react';
 
 /**
- * Vaillant Premium Monitor - V4.2
- * Update: Titel "Arotherm Plus 75/6" in Vaillant-Grün fixiert.
- * Enthält: Status-Logik, Takt-Analyse, mobile Platzoptimierung.
+ * Vaillant Premium Monitor - V4.3
+ * Update: Optimierte Touch-Gesten für flüssiges Verschieben und Pinch-to-Zoom.
  */
 
 const App = () => {
@@ -24,13 +23,13 @@ const App = () => {
   const containerRef = useRef(null);
   const isDragging = useRef(false);
   const lastX = useRef(0);
+  const lastTouchDist = useRef(0); // Für Pinch-to-Zoom
 
   const POINTS_PER_PAGE = 1440; 
   const SHEET_ID = '19PhTnQKksVQL_902Oi7lDEH2KhqaYUFoqL8WZfkEskc';
   const GID = '0';
   const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
 
-  // Initialisierung & Styling-Fixes
   useEffect(() => {
     if (!document.getElementById('tailwind-cdn')) {
       const script = document.createElement('script');
@@ -38,13 +37,11 @@ const App = () => {
       script.src = 'https://cdn.tailwindcss.com';
       document.head.appendChild(script);
     }
-
     document.body.style.backgroundColor = '#020617';
     document.body.style.margin = '0';
     document.body.style.padding = '0';
     document.body.style.color = '#f8fafc';
     document.body.style.overflowX = 'hidden';
-    
     fetchSheetData();
   }, []);
 
@@ -81,7 +78,6 @@ const App = () => {
     return allData.slice(start, end);
   }, [allData, viewIndex]);
 
-  // Logik für den dynamischen Status basierend auf dem letzten Datenpunkt
   const systemStatus = useMemo(() => {
     if (allData.length === 0) return { label: "Offline", color: "rose" };
     const lastValue = allData[allData.length - 1].value;
@@ -141,15 +137,61 @@ const App = () => {
      return icons;
   }, [chartMetrics]);
 
+  // Verbessertes Touch-Handling
+  const handleTouchStart = (e) => {
+    isDragging.current = true;
+    if (e.touches.length === 1) {
+      lastX.current = e.touches[0].clientX;
+      lastTouchDist.current = 0;
+    } else if (e.touches.length === 2) {
+      lastTouchDist.current = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging.current) return;
+
+    if (e.touches.length === 1) {
+      // Panning mit erhöhter Sensitivität (0.008 statt 0.002)
+      const currentX = e.touches[0].clientX;
+      const deltaX = lastX.current - currentX;
+      setPanOffset(p => Math.max(0, Math.min(1, p + (deltaX * 0.008 / zoom))));
+      lastX.current = currentX;
+    } else if (e.touches.length === 2) {
+      // Pinch-to-Zoom Logik
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      if (lastTouchDist.current > 0) {
+        const ratio = dist / lastTouchDist.current;
+        setZoom(z => Math.max(1, Math.min(30, z * ratio)));
+      }
+      lastTouchDist.current = dist;
+    }
+
+    // Tooltip-Logik für Touch
+    if (containerRef.current && chartMetrics) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const touchX = e.touches[0].clientX;
+      const xPos = ((touchX - rect.left) / rect.width) * chartMetrics.width;
+      const closest = chartMetrics.points.reduce((p, c) => Math.abs(c.x - xPos) < Math.abs(p.x - xPos) ? c : p);
+      setHoveredPoint(Math.abs(closest.x - xPos) < 40 ? closest : null);
+    }
+  };
+
   const handleMouseMove = (e) => {
-    const cX = e.clientX || (e.touches && e.touches[0].clientX);
     if (isDragging.current) {
-      setPanOffset(p => Math.max(0, Math.min(1, p + (lastX.current - cX) * 0.002 / zoom)));
-      lastX.current = cX;
+      const deltaX = lastX.current - e.clientX;
+      setPanOffset(p => Math.max(0, Math.min(1, p + (deltaX * 0.004 / zoom))));
+      lastX.current = e.clientX;
     }
     if (containerRef.current && chartMetrics) {
       const rect = containerRef.current.getBoundingClientRect();
-      const xPos = ((cX - rect.left) / rect.width) * chartMetrics.width;
+      const xPos = ((e.clientX - rect.left) / rect.width) * chartMetrics.width;
       const closest = chartMetrics.points.reduce((p, c) => Math.abs(c.x - xPos) < Math.abs(p.x - xPos) ? c : p);
       setHoveredPoint(Math.abs(closest.x - xPos) < 40 ? closest : null);
     }
@@ -187,7 +229,6 @@ const App = () => {
           </div>
         </header>
 
-        {/* Statistik Karten - Status zuerst, Peak zuletzt */}
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-6 mb-4 sm:mb-8">
           <StatCard title="Status" value={systemStatus.label} unit="" icon={<Activity className={`text-${systemStatus.color}-400`} />} color={systemStatus.color} isStatus trend="Live" />
           <StatCard title="Ø-Leistung" value={chartMetrics ? chartMetrics.avg : 0} unit="W" icon={<BarChart3 className="text-amber-400" />} color="amber" />
@@ -218,9 +259,9 @@ const App = () => {
             onMouseMove={handleMouseMove}
             onMouseUp={() => isDragging.current = false}
             onMouseLeave={() => isDragging.current = false}
-            onTouchStart={(e) => { isDragging.current = true; lastX.current = e.touches[0].clientX; }}
-            onTouchMove={handleMouseMove} 
-            onTouchEnd={() => isDragging.current = false}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove} 
+            onTouchEnd={() => { isDragging.current = false; lastTouchDist.current = 0; }}
           >
             {chartMetrics && (
               <svg viewBox={`0 0 ${chartMetrics.width} ${chartMetrics.height}`} className="w-full h-full">
@@ -276,7 +317,7 @@ const App = () => {
 
           <div className="px-3 sm:px-10 py-1 sm:py-4 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-1.5 sm:gap-4 text-center sm:text-left">
              <div className="flex items-center gap-2 text-[7px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest">
-                <Info size={12} className="text-cyan-500 shrink-0"/> Ziehen zum Bewegen • Pinch zum Zoomen
+                <Info size={12} className="text-cyan-500 shrink-0"/> Pinch zum Zoomen • Ziehen zum Bewegen
              </div>
              <div className="text-[8px] sm:text-xs font-black text-cyan-400 bg-cyan-400/5 px-2 py-0.5 rounded-full border border-cyan-400/20">
                {timeRangeLabel}
@@ -285,7 +326,7 @@ const App = () => {
         </div>
 
         <footer className="text-center pb-6 opacity-30">
-           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v4.2 • Premium Monitor</p>
+           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v4.3 • Premium Monitor</p>
         </footer>
       </div>
     </div>
