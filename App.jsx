@@ -181,7 +181,7 @@ const App = () => {
             </div>
             <div className="flex-1">
               <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white uppercase italic">
-                Vaillant <span className="text-cyan-400 not-italic">Monitor</span>
+                Vaillant <span className="text-cyan-400 not-italic">Live</span>
               </h1>
               <div className="flex items-center gap-2 text-slate-400 text-xs sm:text-sm mt-0.5 font-bold">
                 <Calendar size={14} className="text-cyan-500" /> 
@@ -207,7 +207,7 @@ const App = () => {
         {/* Info Cards */}
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
           <StatCard title="Peak (24h)" value={currentWindowData.length > 0 ? Math.max(...currentWindowData.map(d => d.value)) : 0} unit="W" icon={<TrendingUp className="text-rose-400" />} color="rose" />
-          <StatCard title="Ø-Leistung (24h)" value={chartMetrics ? chartMetrics.avg : 0} unit="W" icon={<BarChart3 className="text-amber-400" />} color="amber" />
+          <StatCard title="Ø-Leistung" value={chartMetrics ? chartMetrics.avg : 0} unit="W" icon={<BarChart3 className="text-amber-400" />} color="amber" />
           <StatCard title="Takte (24h)" value={cycleStats} unit="Starts" icon={<RotateCcw className="text-cyan-400" />} color="cyan" />
           <StatCard title="Status" value="Normal" unit="" icon={<Activity className="text-emerald-400" />} color="emerald" isStatus trend="Online" />
         </section>
