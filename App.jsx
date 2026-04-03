@@ -7,8 +7,9 @@ import {
 } from 'lucide-react';
 
 /**
- * Vaillant Premium Monitor - V4.8
- * Update: Mustererkennung basierend auf realem Abtau-Datenlog (Drop -> Ramp -> Peak)
+ * Vaillant Premium Monitor - V5.0
+ * Fix: Manuelles Datums-Parsing (TT.MM.JJJJ) zur Korrektur vertauschter Monate/Tage
+ * Feature: Optimierte Abtauerkennung (V4.9 Logik)
  */
 
 const App = () => {
@@ -53,14 +54,34 @@ const App = () => {
       if (!response.ok) throw new Error('Netzwerk-Fehler');
       const csvText = await response.text();
       const rows = csvText.split('\n').map(row => row.split(','));
+      
       const parsedData = rows.slice(1)
         .filter(row => row.length >= 2 && row[0] !== "")
-        .map((row, index) => ({
-          time: new Date(row[0].replace(/"/g, '')),
-          value: parseFloat(row[1].replace(/"/g, '').replace(',', '.')) || 0,
-          id: index
-        }))
+        .map((row, index) => {
+          // --- FIX: Manuelles Datums-Parsing für TT.MM.JJJJ HH:mm:ss ---
+          const dateStr = row[0].replace(/"/g, '').trim();
+          let time;
+          try {
+            // Teile Datum und Uhrzeit
+            const [datePart, timePart] = dateStr.split(' ');
+            const [day, month, year] = datePart.split('.').map(Number);
+            const [hour, minute, second] = timePart.split(':').map(Number);
+            
+            // Monate im JS Date-Objekt sind 0-basiert (Januar = 0)
+            time = new Date(year, month - 1, day, hour, minute, second || 0);
+          } catch (e) {
+            time = new Date(dateStr); // Fallback
+          }
+
+          return {
+            time: time,
+            value: parseFloat(row[1].replace(/"/g, '').replace(',', '.')) || 0,
+            id: index
+          };
+        })
         .filter(item => !isNaN(item.time.getTime()));
+
+      // Sortierung nach Zeit (Wichtig für die Erkennungslogik)
       parsedData.sort((a, b) => a.time - b.time);
       setAllData(parsedData);
       setViewIndex(0); 
@@ -78,10 +99,10 @@ const App = () => {
     return allData.slice(start, end);
   }, [allData, viewIndex]);
 
-  // --- Optimierte Zyklen-Analyse basierend auf dem neuen Muster ---
+  // --- Abtau-Logik (V4.9: Peak > 1900W nach Drop < 450W innerhalb von 12 Min) ---
   const cycleStats = useMemo(() => {
     const stats = { starts: 0, defrosts: 0, defrostIndices: [] };
-    if (currentWindowData.length < 10) return stats;
+    if (currentWindowData.length < 15) return stats;
 
     let idleMin = 0; 
     let compressorActive = false;
@@ -90,7 +111,7 @@ const App = () => {
       const current = currentWindowData[i].value;
       const prev = currentWindowData[i - 1].value;
 
-      // 1. REGULÄRE VERDICHTERSTARTS
+      // 1. Verdichterstarts
       if (current < 100) {
         idleMin++; 
         if (idleMin >= 15) compressorActive = false;
@@ -102,17 +123,14 @@ const App = () => {
         idleMin = 0;
       }
 
-      // 2. MUSTERERKENNUNG ABTAUEN (Look-Back Algorithmus)
-      // Wir erkennen das Abtauen am PEAK (> 2200W) und prüfen, ob davor ein Drop war.
-      if (current > 2200) {
+      // 2. Abtauerkennung
+      if (current > 1900) {
         let foundDropBefore = false;
-        // Wir schauen bis zu 10 Datenpunkte (ca. 10 Min) zurück
-        for (let j = 1; j <= 10; j++) {
+        for (let j = 1; j <= 12; j++) {
           if (i - j < 1) break;
           const valAtJ = currentWindowData[i - j].value;
           const valBeforeJ = currentWindowData[i - j - 1].value;
           
-          // Einbruch erkannt: Wert < 450W und davor war normaler Heizbetrieb > 600W
           if (valAtJ < 450 && valBeforeJ > 600) {
             foundDropBefore = true;
             break;
@@ -120,9 +138,8 @@ const App = () => {
         }
 
         if (foundDropBefore) {
-          // Dubletten-Schutz: Verhindert Mehrfachzählung während der Plateau-Phase
           const lastIndex = stats.defrostIndices[stats.defrostIndices.length - 1];
-          if (!lastIndex || (currentWindowData[i].id - lastIndex > 15)) {
+          if (!lastIndex || (currentWindowData[i].id - lastIndex > 20)) {
             stats.defrosts++;
             stats.defrostIndices.push(currentWindowData[i].id);
           }
@@ -135,7 +152,7 @@ const App = () => {
   const systemStatus = useMemo(() => {
     if (allData.length === 0) return { label: "Offline", color: "rose" };
     const lastValue = allData[allData.length - 1].value;
-    if (lastValue > 2200) return { label: "Abtauen", color: "orange" };
+    if (lastValue > 1900) return { label: "Abtauen", color: "orange" };
     if (lastValue > 200) return { label: "Heizen", color: "emerald" };
     if (lastValue < 100) return { label: "Standby", color: "cyan" };
     return { label: "Normal", color: "emerald" };
@@ -163,7 +180,7 @@ const App = () => {
     const defrostRects = [];
     visibleData.forEach((d, i) => {
       if (cycleStats.defrostIndices.includes(d.id)) {
-        defrostRects.push({ x: getX(i) - 5, width: 10 });
+        defrostRects.push({ x: getX(i) - 5, width: 15 });
       }
     });
 
@@ -246,7 +263,7 @@ const App = () => {
     if (currentWindowData.length === 0) return "";
     const start = currentWindowData[0].time;
     const end = currentWindowData[currentWindowData.length - 1].time;
-    const f = (d) => d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const f = (d) => d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     return `${f(start)} — ${f(end)}`;
   }, [currentWindowData]);
 
@@ -266,9 +283,9 @@ const App = () => {
               </h1>
               <div className="flex items-center gap-2 text-slate-400 text-[10px] sm:text-sm mt-0.5 font-bold">
                 <Calendar size={12} className="text-cyan-500" /> 
-                {currentWindowData.length > 0 ? currentWindowData[0].time.toLocaleDateString() : '--'}
+                {currentWindowData.length > 0 ? currentWindowData[0].time.toLocaleDateString('de-DE') : '--'}
                 <div className="w-1 h-1 bg-cyan-500 rounded-full animate-pulse"></div>
-                Monitor V4.8
+                Monitor V5.0
               </div>
             </div>
           </div>
@@ -388,7 +405,7 @@ const App = () => {
 
           <div className="px-3 sm:px-10 py-1 sm:py-4 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-1.5 sm:gap-4 text-center sm:text-left">
              <div className="flex items-center gap-2 text-[7px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest">
-                <Info size={12} className="text-cyan-500 shrink-0"/> Muster-Erkennung: Peak {">"} 2200W nach Einbruch {">"} 450W
+                <Info size={12} className="text-cyan-500 shrink-0"/> Muster-Erkennung: Peak {">"} 1900W nach Einbruch {">"} 450W
              </div>
              <div className="text-[8px] sm:text-xs font-black text-cyan-400 bg-cyan-400/5 px-2 py-0.5 rounded-full border border-cyan-400/20">
                {timeRangeLabel}
@@ -397,7 +414,7 @@ const App = () => {
         </div>
 
         <footer className="text-center pb-6 opacity-30">
-           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v4.8 • Premium Monitor</p>
+           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v5.0 • Premium Monitor</p>
         </footer>
       </div>
     </div>
