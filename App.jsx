@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { createRoot } from 'react-dom/client';
-import { Zap, RefreshCcw, ZoomIn, Maximize, Info, AlertTriangle, Clock, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { 
+  Zap, RefreshCcw, ZoomIn, ZoomOut, Maximize, Info, AlertTriangle, 
+  Clock, ChevronLeft, ChevronRight, Calendar, Activity, 
+  TrendingUp, BarChart3, Sun, Moon, RotateCcw 
+} from 'lucide-react';
 
 /**
- * Wärmepumpen Dashboard - Google Sheets Integration
- * Erlaubt das Blättern durch die Historie in 24h-Schritten (1440 Datenpunkte).
+ * Vaillant Premium Monitor - V3.1
+ * Optimierte Kurvendarstellung (Line/Area) im Premium Dark-Design.
  */
 
 const App = () => {
-  const [allData, setAllData] = useState([]); // Alle verfügbaren Daten
-  const [viewIndex, setViewIndex] = useState(0); // Offset vom Ende (0 = aktuellste 24h)
+  const [allData, setAllData] = useState([]); 
+  const [viewIndex, setViewIndex] = useState(0); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // State für Zoom und Pan innerhalb des Fensters
   const [zoom, setZoom] = useState(1);
   const [panOffset, setPanOffset] = useState(0); 
   const [hoveredPoint, setHoveredPoint] = useState(null);
@@ -22,7 +23,7 @@ const App = () => {
   const isDragging = useRef(false);
   const lastX = useRef(0);
 
-  const POINTS_PER_PAGE = 1440; // 24 Stunden bei 1-Min-Intervall
+  const POINTS_PER_PAGE = 1440; 
   const SHEET_ID = '19PhTnQKksVQL_902Oi7lDEH2KhqaYUFoqL8WZfkEskc';
   const GID = '0';
   const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
@@ -32,209 +33,238 @@ const App = () => {
     setError(null);
     try {
       const response = await fetch(CSV_URL);
-      if (!response.ok) throw new Error('Netzwerk-Antwort war nicht ok.');
-      
+      if (!response.ok) throw new Error('Netzwerk-Fehler');
       const csvText = await response.text();
       const rows = csvText.split('\n').map(row => row.split(','));
-      
       const parsedData = rows.slice(1)
         .filter(row => row.length >= 2 && row[0] !== "")
-        .map((row, index) => {
-          const dateStr = row[0].replace(/"/g, '');
-          const valStr = row[1].replace(/"/g, '').replace(',', '.');
-          return {
-            time: new Date(dateStr),
-            value: parseFloat(valStr) || 0,
-            id: index
-          };
-        })
+        .map((row, index) => ({
+          time: new Date(row[0].replace(/"/g, '')),
+          value: parseFloat(row[1].replace(/"/g, '').replace(',', '.')) || 0,
+          id: index
+        }))
         .filter(item => !isNaN(item.time.getTime()));
-
-      if (parsedData.length === 0) throw new Error('Keine gültigen Daten gefunden.');
-      
       parsedData.sort((a, b) => a.time - b.time);
       setAllData(parsedData);
-      setViewIndex(0); // Standardmäßig die neuesten Daten zeigen
+      setViewIndex(0); 
     } catch (err) {
-      setError("Daten konnten nicht geladen werden. Bitte prüfe die Freigabe des Sheets.");
+      setError("Datenverbindung unterbrochen.");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchSheetData();
-  }, []);
+  useEffect(() => { fetchSheetData(); }, []);
 
-  // Aktueller Ausschnitt der Daten (1440 Punkte basierend auf viewIndex)
   const currentWindowData = useMemo(() => {
     if (allData.length === 0) return [];
-    
     const end = allData.length - (viewIndex * POINTS_PER_PAGE);
     const start = Math.max(0, end - POINTS_PER_PAGE);
-    
     return allData.slice(start, end);
   }, [allData, viewIndex]);
 
+  const cycleStats = useMemo(() => {
+    if (currentWindowData.length === 0) return 0;
+    let count = 0; let idleMin = 0; let active = false;
+    currentWindowData.forEach(d => {
+      if (d.value < 100) {
+        idleMin++; if (idleMin >= 15) active = false;
+      } else if (d.value > 500) {
+        if (!active && idleMin >= 15) { count++; active = true; }
+        idleMin = 0;
+      }
+    });
+    return count;
+  }, [currentWindowData]);
+
   const chartMetrics = useMemo(() => {
     if (currentWindowData.length === 0) return null;
-
-    const margin = { top: 30, right: 30, bottom: 50, left: 60 };
-    const width = 1000;
-    const height = 450;
-    const chartWidth = width - margin.left - margin.right;
-    const chartHeight = height - margin.top - margin.bottom;
+    const margin = { top: 60, right: 30, bottom: 60, left: 70 };
+    const width = 1000; const height = 500;
+    const cW = width - margin.left - margin.right;
+    const cH = height - margin.top - margin.bottom;
 
     const values = currentWindowData.map(d => d.value);
-    const avgValue = values.reduce((a, b) => a + b, 0) / values.length;
-    const maxVal = Math.max(...values, avgValue, 0.1) * 1.1; 
+    const avg = values.reduce((a, b) => a + b, 0) / (values.length || 1);
+    const maxVal = Math.max(...values, avg, 100) * 1.1; 
     
-    const visiblePointsCount = Math.max(10, Math.floor(currentWindowData.length / zoom));
-    const maxOffsetValue = currentWindowData.length - visiblePointsCount;
-    const startIdx = Math.floor(panOffset * maxOffsetValue);
-    const visibleData = currentWindowData.slice(startIdx, startIdx + visiblePointsCount);
+    const visibleCount = Math.max(10, Math.floor(currentWindowData.length / zoom));
+    const startIdx = Math.floor(panOffset * (currentWindowData.length - visibleCount));
+    const visibleData = currentWindowData.slice(startIdx, startIdx + visibleCount);
 
-    const getX = (index) => margin.left + (index / (visiblePointsCount - 1)) * chartWidth;
-    const getY = (val) => margin.top + chartHeight - (val / maxVal) * chartHeight;
+    const getX = (i) => margin.left + (i / (visibleCount - 1)) * cW;
+    const getY = (v) => margin.top + cH - (v / maxVal) * cH;
 
-    const points = visibleData.map((d, i) => ({
-      x: getX(i),
-      y: getY(d.value),
-      data: d
-    }));
+    const points = visibleData.map((d, i) => ({ x: getX(i), y: getY(d.value), data: d }));
+    const avgY = getY(avg);
 
-    const pathD = points.length > 1 ? `M ${points[0].x} ${points[0].y} ` + points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ') : "";
-    const areaD = points.length > 1 ? `${pathD} L ${points[points.length - 1].x} ${margin.top + chartHeight} L ${points[0].x} ${margin.top + chartHeight} Z` : "";
-    const avgY = getY(avgValue);
+    // Pfad für die Linie und die Fläche
+    let pathD = "";
+    let areaD = "";
+    if (points.length > 1) {
+      pathD = `M ${points[0].x} ${points[0].y}`;
+      for (let i = 1; i < points.length; i++) {
+        pathD += ` L ${points[i].x} ${points[i].y}`;
+      }
+      areaD = `${pathD} L ${points[points.length - 1].x} ${margin.top + cH} L ${points[0].x} ${margin.top + cH} Z`;
+    }
 
-    return { pathD, areaD, points, margin, width, height, chartWidth, chartHeight, maxVal, visibleData, avgValue, avgY };
+    return { points, pathD, areaD, margin, width, height, cW, cH, maxVal, visibleData, avg, avgY };
   }, [currentWindowData, zoom, panOffset]);
 
-  const goBack = () => {
-    if ((viewIndex + 1) * POINTS_PER_PAGE < allData.length) {
-      setViewIndex(prev => prev + 1);
-      setZoom(1);
-      setPanOffset(0);
-    }
-  };
-
-  const goForward = () => {
-    if (viewIndex > 0) {
-      setViewIndex(prev => prev - 1);
-      setZoom(1);
-      setPanOffset(0);
-    }
-  };
-
-  const handleMouseDown = (e) => {
-    isDragging.current = true;
-    lastX.current = e.clientX || (e.touches && e.touches[0].clientX);
-  };
+  const timeIcons = useMemo(() => {
+     if (!chartMetrics) return [];
+     const icons = [];
+     const step = Math.floor(chartMetrics.visibleData.length / 8);
+     for (let i = 0; i < chartMetrics.visibleData.length; i += Math.max(1, step)) {
+       const h = chartMetrics.visibleData[i].time.getHours();
+       icons.push({ x: chartMetrics.points[i]?.x, Icon: (h > 6 && h < 18 ? Sun : Moon), hour: h });
+     }
+     return icons;
+  }, [chartMetrics]);
 
   const handleMouseMove = (e) => {
-    const currentX = e.clientX || (e.touches && e.touches[0].clientX);
+    const cX = e.clientX || (e.touches && e.touches[0].clientX);
     if (isDragging.current) {
-      const deltaX = lastX.current - currentX;
-      setPanOffset(prev => Math.max(0, Math.min(1, prev + (deltaX * 0.002 / zoom))));
-      lastX.current = currentX;
+      setPanOffset(p => Math.max(0, Math.min(1, p + (lastX.current - cX) * 0.002 / zoom)));
+      lastX.current = cX;
     }
     if (containerRef.current && chartMetrics) {
       const rect = containerRef.current.getBoundingClientRect();
-      const xPos = ((currentX - rect.left) / rect.width) * chartMetrics.width;
+      const xPos = ((cX - rect.left) / rect.width) * chartMetrics.width;
       const closest = chartMetrics.points.reduce((p, c) => Math.abs(c.x - xPos) < Math.abs(p.x - xPos) ? c : p);
-      setHoveredPoint(Math.abs(closest.x - xPos) < 20 ? closest : null);
+      setHoveredPoint(Math.abs(closest.x - xPos) < 30 ? closest : null);
     }
   };
 
+  const timeRangeLabel = useMemo(() => {
+    if (currentWindowData.length === 0) return "";
+    const start = currentWindowData[0].time;
+    const end = currentWindowData[currentWindowData.length - 1].time;
+    const f = (d) => d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return `${f(start)} bis ${f(end)}`;
+  }, [currentWindowData]);
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans p-4 md:p-8">
-      <div className="max-w-6xl mx-auto">
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <div className="p-2 bg-blue-600 rounded-lg shadow-blue-200 shadow-lg">
-                <Zap className="text-white" size={24} />
-              </div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-800">Wärmepumpen-Monitor</h1>
+    <div className="min-h-screen bg-[#020617] text-slate-100 font-sans p-3 sm:p-6 md:p-10 overflow-x-hidden relative">
+      {/* Hintergrund Dekoration */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-20">
+         <div className="absolute -top-[20%] -left-[10%] w-[60%] h-[60%] bg-cyan-900 rounded-full blur-[150px]"></div>
+         <div className="absolute -bottom-[20%] -right-[10%] w-[50%] h-[50%] bg-blue-900 rounded-full blur-[150px]"></div>
+      </div>
+
+      <div className="max-w-7xl mx-auto relative z-10">
+        
+        {/* Header */}
+        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6">
+          <div className="flex items-center gap-4 sm:gap-6">
+            <div className="p-4 bg-gradient-to-tr from-cyan-600 to-blue-700 rounded-2xl shadow-[0_0_40px_rgba(8,145,178,0.3)] border border-cyan-400/30">
+              <Zap className="text-white fill-white/10" size={32} />
             </div>
-            <div className="flex items-center gap-2 text-slate-500 text-sm">
-                <Calendar size={14} />
-                <span>Zeitraum: {currentWindowData.length > 0 ? 
-                  `${currentWindowData[0].time.toLocaleDateString()} - ${currentWindowData[currentWindowData.length-1].time.toLocaleDateString()}` : 'Lade...'}</span>
+            <div>
+              <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white uppercase italic">
+                Vaillant <span className="text-cyan-400 not-italic">Live</span>
+              </h1>
+              <div className="flex items-center gap-3 text-slate-400 text-xs sm:text-sm mt-1 font-bold">
+                <Calendar size={14} className="text-cyan-500" /> {currentWindowData.length > 0 ? currentWindowData[0].time.toLocaleDateString() : '--'}
+                <div className="w-1.5 h-1.5 bg-cyan-500 rounded-full animate-pulse"></div>
+                Monitoring
+              </div>
             </div>
           </div>
-          <div className="flex gap-2 w-full md:w-auto">
-            <button onClick={fetchSheetData} disabled={loading} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white border border-slate-200 px-4 py-2.5 rounded-xl hover:bg-slate-50 transition-all shadow-sm font-medium disabled:opacity-50">
-              <RefreshCcw size={18} className={loading ? 'animate-spin' : ''} />
-              <span className="hidden sm:inline">Refresh</span>
-            </button>
-            <button onClick={() => { setZoom(1); setPanOffset(0); }} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-100 text-slate-600 px-4 py-2.5 rounded-xl hover:bg-slate-200 transition-all font-medium">
-              <Maximize size={18} />
-              Reset Zoom
-            </button>
+          
+          <div className="flex flex-col gap-3 w-full lg:w-auto">
+            <div className="grid grid-cols-2 gap-3 sm:flex">
+              <HeaderBtn onClick={fetchSheetData} icon={<RefreshCcw size={18} className={loading ? 'animate-spin' : ''}/>} label="Refresh" />
+              <HeaderBtn onClick={() => { setZoom(1); setPanOffset(0); }} icon={<Maximize size={18}/>} label="Reset" primary />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <HeaderBtn onClick={() => setZoom(z => Math.min(30, z * 1.5))} icon={<ZoomIn size={18}/>} label="Zoom +" />
+              <HeaderBtn onClick={() => setZoom(z => Math.max(1, z * 0.7))} icon={<ZoomOut size={18}/>} label="Zoom -" />
+            </div>
           </div>
         </header>
 
-        <div className="flex items-center justify-between mb-4 bg-white p-2 rounded-2xl border border-slate-100 shadow-sm">
-          <button onClick={goBack} disabled={loading || (viewIndex + 1) * POINTS_PER_PAGE >= allData.length} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 disabled:opacity-30 transition-all font-semibold">
-            <ChevronLeft size={20} /> 24h zurück
-          </button>
-          <div className="text-center">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest block">Ansicht</span>
-            <span className="text-sm font-bold text-blue-600">{viewIndex === 0 ? "Aktuelle 24 Stunden" : `Vor ${viewIndex * 24} Stunden`}</span>
-          </div>
-          <button onClick={goForward} disabled={loading || viewIndex === 0} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 disabled:opacity-30 transition-all font-semibold">
-            24h vor <ChevronRight size={20} />
-          </button>
-        </div>
+        {/* Statistik Raster */}
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
+          <StatCard title="Peak (24h)" value={currentWindowData.length > 0 ? Math.max(...currentWindowData.map(d => d.value)) : 0} unit="W" icon={<TrendingUp className="text-rose-400" />} color="rose" />
+          <StatCard title="Ø-Leistung (24h)" value={chartMetrics ? chartMetrics.avg : 0} unit="W" icon={<BarChart3 className="text-amber-400" />} color="amber" />
+          <StatCard title="Takte (24h)" value={cycleStats} unit="Starts" icon={<RotateCcw className="text-cyan-400" />} color="cyan" />
+          <StatCard title="Status" value="Normal" unit="" icon={<Activity className="text-emerald-400" />} color="emerald" isStatus />
+        </section>
 
-        {error && (
-          <div className="mb-6 p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-start gap-3 text-rose-800">
-            <AlertTriangle className="shrink-0 mt-0.5" size={20} />
-            <div><p className="font-bold">Fehler</p><p className="text-sm">{error}</p></div>
+        {/* Haupt-Grafik */}
+        <div className="bg-slate-900/60 backdrop-blur-2xl rounded-[2rem] sm:rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden mb-10">
+          
+          <div className="px-6 sm:px-10 pt-6 sm:pt-10 flex flex-col sm:flex-row justify-between items-center border-b border-white/5 pb-6 gap-6">
+            <div className="w-full sm:w-auto flex items-center gap-8 overflow-x-auto no-scrollbar pb-2 sm:pb-0">
+              {timeIcons.map((item, idx) => (
+                <div key={idx} className="flex flex-col items-center gap-2 min-w-[40px]">
+                  <item.Icon size={20} className={item.Icon === Sun ? "text-amber-400" : "text-blue-400"} />
+                  <span className="text-[10px] font-black text-slate-500">{item.hour}:00</span>
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex gap-3 w-full sm:w-auto">
+               <NavBtn onClick={() => { setViewIndex(v => v + 1); setZoom(1); }} icon={<ChevronLeft size={22}/>} label="-24h" />
+               <NavBtn onClick={() => { setViewIndex(v => v - 1); setZoom(1); }} icon={<ChevronRight size={22}/>} label="+24h" active={viewIndex > 0} />
+            </div>
           </div>
-        )}
 
-        <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden relative">
-          <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
-            <button onClick={() => setZoom(z => Math.min(30, z * 1.5))} className="p-2.5 bg-white/90 backdrop-blur border border-slate-200 rounded-xl shadow-sm hover:bg-white text-blue-600 active:scale-95 transition-transform"><ZoomIn size={20}/></button>
-            <button onClick={() => setZoom(z => Math.max(1, z * 0.7))} className="p-2.5 bg-white/90 backdrop-blur border border-slate-200 rounded-xl shadow-sm hover:bg-white text-slate-600 active:scale-95 transition-transform"><span className="font-bold text-lg leading-none">−</span></button>
-          </div>
-          <div className="w-full h-[450px] cursor-crosshair touch-none select-none relative" ref={containerRef} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={() => isDragging.current = false} onMouseLeave={() => isDragging.current = false} onTouchStart={handleMouseDown} onTouchMove={handleMouseMove} onTouchEnd={() => isDragging.current = false}>
+          <div 
+            className="w-full h-[400px] sm:h-[550px] relative cursor-crosshair touch-none select-none" 
+            ref={containerRef}
+            onMouseDown={(e) => { isDragging.current = true; lastX.current = e.clientX; }}
+            onMouseMove={handleMouseMove}
+            onMouseUp={() => isDragging.current = false}
+            onMouseLeave={() => isDragging.current = false}
+            onTouchStart={(e) => { isDragging.current = true; lastX.current = e.touches[0].clientX; }}
+            onTouchMove={handleMouseMove}
+            onTouchEnd={() => isDragging.current = false}
+          >
             {chartMetrics && (
               <svg viewBox={`0 0 ${chartMetrics.width} ${chartMetrics.height}`} className="w-full h-full">
+                <defs>
+                  <linearGradient id="areaGrad" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.4" />
+                    <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
+                  </linearGradient>
+                  <filter id="glow">
+                    <feGaussianBlur stdDeviation="3" result="blur" />
+                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                  </filter>
+                </defs>
+
+                <text transform={`translate(20, ${chartMetrics.height / 2}) rotate(-90)`} textAnchor="middle" className="text-[10px] fill-white/20 font-black uppercase tracking-[0.4em]">Leistung in Watt</text>
+
+                {/* Gitter */}
                 {[0, 0.25, 0.5, 0.75, 1].map(p => (
                   <g key={p}>
-                    <line x1={chartMetrics.margin.left} x2={chartMetrics.width - chartMetrics.margin.right} y1={chartMetrics.margin.top + chartMetrics.chartHeight * p} y2={chartMetrics.margin.top + chartMetrics.chartHeight * p} stroke="#f1f5f9" strokeWidth="1" />
-                    <text x={chartMetrics.margin.left - 12} y={chartMetrics.margin.top + chartMetrics.chartHeight * (1 - p) + 4} textAnchor="end" className="text-[12px] fill-slate-400 font-medium">{(chartMetrics.maxVal * p).toFixed(1)}</text>
+                    <line x1={chartMetrics.margin.left} x2={chartMetrics.width - chartMetrics.margin.right} y1={chartMetrics.margin.top + chartMetrics.cH * (1-p)} y2={chartMetrics.margin.top + chartMetrics.cH * (1-p)} stroke="white" strokeOpacity="0.05" strokeWidth="1" />
+                    <text x={chartMetrics.margin.left - 15} y={chartMetrics.margin.top + chartMetrics.cH * (1-p) + 4} textAnchor="end" className="text-[12px] fill-slate-500 font-bold">{(chartMetrics.maxVal * p).toFixed(0)}</text>
                   </g>
                 ))}
-                {chartMetrics.visibleData.filter((_, i) => i % Math.max(1, Math.floor(chartMetrics.visibleData.length / 6)) === 0).map((d) => {
-                  const x = chartMetrics.points.find(p => p.data.id === d.id)?.x;
-                  if (!x) return null;
-                  return <text key={d.id} x={x} y={chartMetrics.height - 18} textAnchor="middle" className="text-[11px] fill-slate-400 font-medium">{d.time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</text>;
-                })}
-                <defs>
-                  <linearGradient id="chartGradient" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
-                    <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <path d={chartMetrics.areaD} fill="url(#chartGradient)" />
-                <path d={chartMetrics.pathD} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-                <g>
-                  <line x1={chartMetrics.margin.left} x2={chartMetrics.width - chartMetrics.margin.right} y1={chartMetrics.avgY} y2={chartMetrics.avgY} stroke="#ef4444" strokeWidth="2" strokeDasharray="6,4" />
-                  <rect x={chartMetrics.width - chartMetrics.margin.right - 90} y={chartMetrics.avgY - 25} width="85" height="20" rx="4" fill="#ef4444" />
-                  <text x={chartMetrics.width - chartMetrics.margin.right - 47.5} y={chartMetrics.avgY - 11} textAnchor="middle" className="text-[10px] fill-white font-bold">Ø {chartMetrics.avgValue.toFixed(2)} kW</text>
+
+                {/* Kurve - Zurück zur Linien/Flächen-Darstellung */}
+                <path d={chartMetrics.areaD} fill="url(#areaGrad)" />
+                <path d={chartMetrics.pathD} fill="none" stroke="#22d3ee" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" filter="url(#glow)" />
+
+                {/* Durchschnittslinie (Mittelwert) */}
+                <g filter="url(#glow)">
+                  <line x1={chartMetrics.margin.left} x2={chartMetrics.width - chartMetrics.margin.right} y1={chartMetrics.avgY} y2={chartMetrics.avgY} stroke="#f59e0b" strokeWidth="3" strokeDasharray="10,5" />
+                  <text x={chartMetrics.width - chartMetrics.margin.right} y={chartMetrics.avgY - 10} textAnchor="end" className="text-[11px] fill-amber-400 font-black uppercase tracking-wider">Ø-Leistung: {chartMetrics.avg.toFixed(0)} W</text>
                 </g>
+
+                {/* Tooltip bei Interaktion */}
                 {hoveredPoint && (
                   <g>
-                    <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={chartMetrics.margin.top} y2={chartMetrics.height - chartMetrics.margin.bottom} stroke="#94a3b8" strokeWidth="1" strokeDasharray="4" />
-                    <circle cx={hoveredPoint.x} cy={hoveredPoint.y} r="6" fill="#2563eb" stroke="white" strokeWidth="2.5" />
-                    <foreignObject x={hoveredPoint.x > chartMetrics.width - 150 ? hoveredPoint.x - 140 : hoveredPoint.x + 10} y={hoveredPoint.y - 65} width="130" height="60">
-                      <div className="bg-slate-800/95 backdrop-blur text-white p-2.5 rounded-xl text-xs shadow-2xl border border-slate-700">
-                        <div className="text-slate-400 mb-0.5">{hoveredPoint.data.time.toLocaleString([], {day: '2-digit', month: '2-digit', hour: '2-digit', minute:'2-digit'})}</div>
-                        <div className="text-sm font-bold text-blue-300">{hoveredPoint.data.value.toLocaleString('de-DE')} kW</div>
+                    <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={chartMetrics.margin.top} y2={chartMetrics.height - chartMetrics.margin.bottom} stroke="white" strokeOpacity="0.2" strokeWidth="1" />
+                    <circle cx={hoveredPoint.x} cy={hoveredPoint.y} r="8" fill="#22d3ee" stroke="#020617" strokeWidth="3" />
+                    <foreignObject x={hoveredPoint.x > chartMetrics.width - 180 ? hoveredPoint.x - 170 : hoveredPoint.x + 20} y={hoveredPoint.y - 80} width="150" height="90">
+                      <div className="bg-slate-950/90 border border-white/10 p-3 rounded-2xl shadow-2xl backdrop-blur-xl">
+                        <div className="text-[10px] text-slate-500 font-black uppercase tracking-tighter">{hoveredPoint.data.time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} Uhr</div>
+                        <div className="text-2xl font-black text-white">{hoveredPoint.data.value.toFixed(0)}<span className="text-cyan-400 text-sm ml-1">W</span></div>
                       </div>
                     </foreignObject>
                   </g>
@@ -242,49 +272,55 @@ const App = () => {
               </svg>
             )}
           </div>
+          
+          <div className="px-6 sm:px-10 py-5 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-4">
+             <div className="flex items-center gap-2 text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-[0.2em]"><Info size={16} className="text-cyan-500"/> Swipe zum Scrollen • Pinch zum Zoomen</div>
+             <div className="text-[10px] sm:text-xs font-black text-cyan-400 bg-cyan-400/10 px-3 py-1 rounded-full border border-cyan-400/20">{timeRangeLabel}</div>
+          </div>
         </div>
 
-        <section className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Letzter Wert" value={currentWindowData.length > 0 ? currentWindowData[currentWindowData.length-1].value.toLocaleString('de-DE', {minimumFractionDigits: 2}) : '--'} unit="kW" color="blue" sub={`um ${currentWindowData.length > 0 ? currentWindowData[currentWindowData.length-1].time.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--'}`} />
-          <StatCard title="Spitzenwert" value={currentWindowData.length > 0 ? Math.max(...currentWindowData.map(d => d.value)).toLocaleString('de-DE', {maximumFractionDigits: 1}) : '--'} unit="kW" color="red" sub="Maximaler Peak" />
-          <StatCard title="Ø Verbrauch" value={chartMetrics ? chartMetrics.avgValue.toLocaleString('de-DE', {maximumFractionDigits: 2}) : '--'} unit="kW" color="orange" sub="Durchschnitt im Zeitraum" />
-          <StatCard title="Datenhistorie" value={allData.length.toLocaleString('de-DE')} unit="Punkte" color="green" sub="Gesamt verfügbare Daten" />
-        </section>
+        <footer className="text-center pb-12 opacity-40">
+           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.5em]">System-ID: {SHEET_ID.slice(0,8)} • Vaillant Dashboard v3.1</p>
+        </footer>
       </div>
     </div>
   );
 };
 
-const StatCard = ({ title, value, unit, color, sub }) => {
-  const colorMap = {
-    blue: "text-blue-600 bg-blue-50 border-blue-100",
-    red: "text-rose-600 bg-rose-50 border-rose-100",
-    orange: "text-amber-600 bg-amber-50 border-amber-100",
-    green: "text-emerald-600 bg-emerald-50 border-emerald-100",
+const StatCard = ({ title, value, unit, icon, color, isStatus, trend }) => {
+  const colors = {
+    rose: "from-rose-500/20 to-rose-900/10 border-rose-500/30",
+    amber: "from-amber-500/20 to-amber-900/10 border-amber-500/30",
+    cyan: "from-cyan-500/20 to-cyan-900/10 border-cyan-500/30",
+    emerald: "from-emerald-500/20 to-emerald-900/10 border-emerald-500/30"
   };
   return (
-    <div className={`bg-white p-6 rounded-2xl border ${colorMap[color].split(' ')[2]} shadow-sm transition-all hover:shadow-md`}>
-      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{title}</p>
-      <div className="flex items-baseline gap-2">
-        <span className="text-3xl font-black text-slate-800">{value}</span>
-        <span className="text-slate-500 font-medium">{unit}</span>
+    <div className={`relative overflow-hidden bg-gradient-to-br ${colors[color]} border p-4 sm:p-6 rounded-[2rem] group transition-all hover:scale-[1.02] shadow-xl`}>
+      <div className="flex justify-between items-start mb-4">
+        <div className="p-3 bg-slate-900/80 rounded-xl group-hover:rotate-12 transition-transform border border-white/5">{icon}</div>
+        {isStatus && <div className="flex items-center gap-2 bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-[10px] font-black uppercase border border-emerald-500/30">Online</div>}
       </div>
-      <p className="text-[10px] text-slate-400 mt-1 font-medium italic">{sub}</p>
+      <p className="text-slate-400 text-[10px] sm:text-xs font-black uppercase tracking-widest mb-1">{title}</p>
+      <div className="flex items-baseline gap-1 sm:gap-2">
+        <span className="text-2xl sm:text-4xl font-black text-white tracking-tighter">
+          {typeof value === 'number' ? value.toLocaleString('de-DE', { maximumFractionDigits: 0 }) : value}
+        </span>
+        <span className="text-slate-500 font-bold text-xs sm:text-sm uppercase">{unit}</span>
+      </div>
     </div>
   );
 };
 
-// Falls die Umgebung den Start nicht automatisch übernimmt, starten wir hier manuell.
-// Ein Try-Catch verhindert Fehler in der Canvas-Vorschau.
-try {
-  const container = document.getElementById('root');
-  if (container && !window.__manual_render_done) {
-    window.__manual_render_done = true;
-    const root = createRoot(container);
-    root.render(<App />);
-  }
-} catch (e) {
-  // In der Canvas-Umgebung wird dies ignoriert, da die Plattform das Rendering selbst steuert.
-}
+const HeaderBtn = ({ onClick, icon, label, primary }) => (
+  <button onClick={onClick} className={`flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 border ${primary ? 'bg-cyan-600 border-cyan-400 text-white shadow-[0_0_20px_rgba(8,145,178,0.3)]' : 'bg-slate-900/80 border-white/10 text-slate-300 hover:bg-slate-800'}`}>
+    {icon} {label}
+  </button>
+);
+
+const NavBtn = ({ onClick, icon, label, active = true }) => (
+  <button onClick={onClick} disabled={!active} className={`flex items-center gap-3 px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border ${active ? 'bg-slate-800 border-white/10 text-white hover:bg-slate-700' : 'opacity-20 border-transparent text-slate-600'}`}>
+    {icon} {label}
+  </button>
+);
 
 export default App;
