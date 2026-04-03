@@ -7,9 +7,9 @@ import {
 } from 'lucide-react';
 
 /**
- * Vaillant Premium Monitor - V5.0
- * Fix: Manuelles Datums-Parsing (TT.MM.JJJJ) zur Korrektur vertauschter Monate/Tage
- * Feature: Optimierte Abtauerkennung (V4.9 Logik)
+ * Vaillant Premium Monitor - V5.1
+ * Fix: Navigation an den Datenanfang angepasst (Truncation bei < 24h)
+ * Feature: Robuste Abtauerkennung & Datums-Parsing TT.MM.JJJJ
  */
 
 const App = () => {
@@ -58,19 +58,15 @@ const App = () => {
       const parsedData = rows.slice(1)
         .filter(row => row.length >= 2 && row[0] !== "")
         .map((row, index) => {
-          // --- FIX: Manuelles Datums-Parsing für TT.MM.JJJJ HH:mm:ss ---
           const dateStr = row[0].replace(/"/g, '').trim();
           let time;
           try {
-            // Teile Datum und Uhrzeit
             const [datePart, timePart] = dateStr.split(' ');
             const [day, month, year] = datePart.split('.').map(Number);
             const [hour, minute, second] = timePart.split(':').map(Number);
-            
-            // Monate im JS Date-Objekt sind 0-basiert (Januar = 0)
             time = new Date(year, month - 1, day, hour, minute, second || 0);
           } catch (e) {
-            time = new Date(dateStr); // Fallback
+            time = new Date(dateStr);
           }
 
           return {
@@ -81,7 +77,6 @@ const App = () => {
         })
         .filter(item => !isNaN(item.time.getTime()));
 
-      // Sortierung nach Zeit (Wichtig für die Erkennungslogik)
       parsedData.sort((a, b) => a.time - b.time);
       setAllData(parsedData);
       setViewIndex(0); 
@@ -92,12 +87,27 @@ const App = () => {
     }
   };
 
+  // --- Navigations-Sicherheit & Fenster-Berechnung ---
   const currentWindowData = useMemo(() => {
     if (allData.length === 0) return [];
-    const end = allData.length - (viewIndex * POINTS_PER_PAGE);
+    
+    // Berechne das Ende des Fensters (rückwärts von allData.length)
+    const end = Math.max(0, allData.length - (viewIndex * POINTS_PER_PAGE));
+    
+    // Falls das Ende bereits bei 0 liegt, ist nichts mehr anzuzeigen
+    if (end <= 0) return [];
+
+    // Der Start ist entweder end - 1440 oder der absolute Anfang (0)
     const start = Math.max(0, end - POINTS_PER_PAGE);
+    
     return allData.slice(start, end);
   }, [allData, viewIndex]);
+
+  // Prüfen, ob noch Daten für den "-24h" Schritt vorhanden sind
+  const hasMoreHistory = useMemo(() => {
+    const currentEnd = allData.length - (viewIndex * POINTS_PER_PAGE);
+    return currentEnd > POINTS_PER_PAGE;
+  }, [allData.length, viewIndex]);
 
   // --- Abtau-Logik (V4.9: Peak > 1900W nach Drop < 450W innerhalb von 12 Min) ---
   const cycleStats = useMemo(() => {
@@ -111,7 +121,6 @@ const App = () => {
       const current = currentWindowData[i].value;
       const prev = currentWindowData[i - 1].value;
 
-      // 1. Verdichterstarts
       if (current < 100) {
         idleMin++; 
         if (idleMin >= 15) compressorActive = false;
@@ -123,7 +132,6 @@ const App = () => {
         idleMin = 0;
       }
 
-      // 2. Abtauerkennung
       if (current > 1900) {
         let foundDropBefore = false;
         for (let j = 1; j <= 12; j++) {
@@ -170,7 +178,7 @@ const App = () => {
     const maxVal = Math.max(...values, avg, 100) * 1.1; 
     const visibleCount = Math.max(10, Math.floor(currentWindowData.length / zoom));
     const startIdx = Math.floor(panOffset * (currentWindowData.length - visibleCount));
-    const visibleData = currentWindowData.slice(startIdx, startIdx + visibleCount);
+    const visibleData = currentWindowData.slice(startIdx, Math.min(currentWindowData.length, startIdx + visibleCount));
     
     const getX = (i) => margin.left + (i / (visibleCount - 1)) * cW;
     const getY = (v) => margin.top + cH - (v / maxVal) * cH;
@@ -285,7 +293,7 @@ const App = () => {
                 <Calendar size={12} className="text-cyan-500" /> 
                 {currentWindowData.length > 0 ? currentWindowData[0].time.toLocaleDateString('de-DE') : '--'}
                 <div className="w-1 h-1 bg-cyan-500 rounded-full animate-pulse"></div>
-                Monitor V5.0
+                Monitor V5.1
               </div>
             </div>
           </div>
@@ -327,8 +335,18 @@ const App = () => {
               ))}
             </div>
             <div className="flex gap-2 w-full sm:w-auto justify-end">
-                <NavBtn onClick={() => { setViewIndex(v => v + 1); setZoom(1); setPanOffset(0); }} icon={<ChevronLeft size={18}/>} label="-24h" />
-                <NavBtn onClick={() => { setViewIndex(v => v - 1); setZoom(1); setPanOffset(0); }} icon={<ChevronRight size={18}/>} label="+24h" active={viewIndex > 0} />
+                <NavBtn 
+                  onClick={() => { setViewIndex(v => v + 1); setZoom(1); setPanOffset(0); }} 
+                  icon={<ChevronLeft size={18}/>} 
+                  label="-24h" 
+                  active={hasMoreHistory}
+                />
+                <NavBtn 
+                  onClick={() => { setViewIndex(v => v - 1); setZoom(1); setPanOffset(0); }} 
+                  icon={<ChevronRight size={18}/>} 
+                  label="+24h" 
+                  active={viewIndex > 0} 
+                />
             </div>
           </div>
 
@@ -405,7 +423,7 @@ const App = () => {
 
           <div className="px-3 sm:px-10 py-1 sm:py-4 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-1.5 sm:gap-4 text-center sm:text-left">
              <div className="flex items-center gap-2 text-[7px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest">
-                <Info size={12} className="text-cyan-500 shrink-0"/> Muster-Erkennung: Peak {">"} 1900W nach Einbruch {">"} 450W
+                <Info size={12} className="text-cyan-500 shrink-0"/> Truncation-Fix: Zeigt den Datenanfang korrekt an, auch wenn {`<`} 24h verfügbar
              </div>
              <div className="text-[8px] sm:text-xs font-black text-cyan-400 bg-cyan-400/5 px-2 py-0.5 rounded-full border border-cyan-400/20">
                {timeRangeLabel}
@@ -414,7 +432,7 @@ const App = () => {
         </div>
 
         <footer className="text-center pb-6 opacity-30">
-           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v5.0 • Premium Monitor</p>
+           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v5.1 • Premium Monitor</p>
         </footer>
       </div>
     </div>
