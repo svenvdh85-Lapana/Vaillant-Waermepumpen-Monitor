@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 
 /**
- * Vaillant Premium Monitor - V3.4 (Bulletproof Version)
- * Behebt das Problem der fehlenden Formatierung auf Smartphones.
+ * Vaillant Premium Monitor - V3.7
+ * Update: Status-Logik (Heizen/Standby) und Kachel-Anordnung angepasst.
  */
 
 const App = () => {
@@ -31,7 +31,6 @@ const App = () => {
 
   // Initialisierung: Stellt sicher, dass CSS geladen wird
   useEffect(() => {
-    // 1. Tailwind CDN laden, falls es fehlt
     if (!document.getElementById('tailwind-cdn')) {
       const script = document.createElement('script');
       script.id = 'tailwind-cdn';
@@ -39,7 +38,6 @@ const App = () => {
       document.head.appendChild(script);
     }
 
-    // 2. Hintergrundfarbe auf der gesamten Browser-Seite erzwingen
     document.body.style.backgroundColor = '#020617';
     document.body.style.margin = '0';
     document.body.style.padding = '0';
@@ -81,6 +79,19 @@ const App = () => {
     const start = Math.max(0, end - POINTS_PER_PAGE);
     return allData.slice(start, end);
   }, [allData, viewIndex]);
+
+  // Logik für den dynamischen Status basierend auf dem letzten Datenpunkt
+  const systemStatus = useMemo(() => {
+    if (allData.length === 0) return { label: "Offline", color: "rose" };
+    const lastValue = allData[allData.length - 1].value;
+    
+    if (lastValue > 200) {
+      return { label: "Heizen", color: "emerald", active: true };
+    } else if (lastValue < 100) {
+      return { label: "Standby", color: "cyan", active: false };
+    }
+    return { label: "Normal", color: "emerald", active: false };
+  }, [allData]);
 
   const cycleStats = useMemo(() => {
     if (currentWindowData.length === 0) return 0;
@@ -191,30 +202,20 @@ const App = () => {
               </div>
             </div>
           </div>
-          
-          <div className="flex flex-col gap-2.5 w-full lg:w-auto">
-            <div className="grid grid-cols-2 gap-2.5 sm:flex">
-              <HeaderBtn onClick={fetchSheetData} icon={<RefreshCcw size={16} className={loading ? 'animate-spin' : ''}/>} label="Refresh" />
-              <HeaderBtn onClick={() => { setZoom(1); setPanOffset(0); }} icon={<Maximize size={16}/>} label="Reset" primary />
-            </div>
-            <div className="grid grid-cols-2 gap-2.5">
-              <HeaderBtn onClick={() => setZoom(z => Math.min(30, z * 1.5))} icon={<ZoomIn size={16}/>} label="Zoom +" />
-              <HeaderBtn onClick={() => setZoom(z => Math.max(1, z * 0.7))} icon={<ZoomOut size={16}/>} label="Zoom -" />
-            </div>
-          </div>
         </header>
 
-        {/* Info Cards */}
+        {/* Info Cards - Swapped Order: Status first, Peak last */}
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
-          <StatCard title="Peak (24h)" value={currentWindowData.length > 0 ? Math.max(...currentWindowData.map(d => d.value)) : 0} unit="W" icon={<TrendingUp className="text-rose-400" />} color="rose" />
+          <StatCard title="Status" value={systemStatus.label} unit="" icon={<Activity className={`text-${systemStatus.color}-400`} />} color={systemStatus.color} isStatus trend="Live" />
           <StatCard title="Ø-Leistung" value={chartMetrics ? chartMetrics.avg : 0} unit="W" icon={<BarChart3 className="text-amber-400" />} color="amber" />
           <StatCard title="Takte (24h)" value={cycleStats} unit="Starts" icon={<RotateCcw className="text-cyan-400" />} color="cyan" />
-          <StatCard title="Status" value="Normal" unit="" icon={<Activity className="text-emerald-400" />} color="emerald" isStatus trend="Online" />
+          <StatCard title="Peak (24h)" value={currentWindowData.length > 0 ? Math.max(...currentWindowData.map(d => d.value)) : 0} unit="W" icon={<TrendingUp className="text-rose-400" />} color="rose" />
         </section>
 
         {/* Main Chart Card */}
         <div className="bg-slate-900/40 backdrop-blur-xl rounded-[1.5rem] sm:rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden mb-10">
           
+          {/* Top Toolbar (Zeitnavigation) */}
           <div className="px-4 sm:px-10 pt-4 sm:pt-10 flex flex-col sm:flex-row justify-between items-center border-b border-white/5 pb-4 sm:pb-6 gap-4">
             <div className="w-full sm:w-auto flex items-center gap-6 sm:gap-8 overflow-x-auto no-scrollbar pb-1">
               {timeIcons.map((item, idx) => (
@@ -225,7 +226,7 @@ const App = () => {
               ))}
             </div>
             
-            <div className="flex gap-2 w-full sm:w-auto">
+            <div className="flex gap-2 w-full sm:w-auto justify-end">
                <NavBtn onClick={() => { setViewIndex(v => v + 1); setZoom(1); setPanOffset(0); }} icon={<ChevronLeft size={20}/>} label="-24h" />
                <NavBtn onClick={() => { setViewIndex(v => v - 1); setZoom(1); setPanOffset(0); }} icon={<ChevronRight size={20}/>} label="+24h" active={viewIndex > 0} />
             </div>
@@ -239,7 +240,7 @@ const App = () => {
             onMouseUp={() => isDragging.current = false}
             onMouseLeave={() => isDragging.current = false}
             onTouchStart={(e) => { isDragging.current = true; lastX.current = e.touches[0].clientX; }}
-            onTouchMove={handleMouseMove}
+            onTouchMove={handleMouseMove} 
             onTouchEnd={() => isDragging.current = false}
           >
             {chartMetrics && (
@@ -276,12 +277,7 @@ const App = () => {
                   <g>
                     <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={chartMetrics.margin.top} y2={chartMetrics.height - chartMetrics.margin.bottom} stroke="white" strokeOpacity="0.2" strokeWidth="1" />
                     <circle cx={hoveredPoint.x} cy={hoveredPoint.y} r="8" fill="#22d3ee" stroke="#020617" strokeWidth="3" />
-                    <foreignObject 
-                      x={hoveredPoint.x > chartMetrics.width - 160 ? hoveredPoint.x - 150 : hoveredPoint.x + 15} 
-                      y={hoveredPoint.y - 80} 
-                      width="140" 
-                      height="85"
-                    >
+                    <foreignObject x={hoveredPoint.x > chartMetrics.width - 160 ? hoveredPoint.x - 150 : hoveredPoint.x + 15} y={hoveredPoint.y - 80} width="140" height="85">
                       <div className="bg-slate-950/95 border border-white/10 p-3 rounded-2xl shadow-2xl backdrop-blur-xl">
                         <div className="text-[9px] text-slate-500 font-black uppercase tracking-tighter">{hoveredPoint.data.time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} Uhr</div>
                         <div className="text-xl font-black text-white">{hoveredPoint.data.value.toFixed(0)}<span className="text-cyan-400 text-xs ml-1 font-normal">W</span></div>
@@ -293,8 +289,21 @@ const App = () => {
             )}
           </div>
           
-          <div className="px-4 sm:px-10 py-5 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-4">
-             <div className="flex items-center gap-2 text-[8px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest text-center">
+          {/* Untere Aktionsleiste (Refresh, Reset, Zoom) */}
+          <div className="px-4 sm:px-10 py-5 bg-slate-800/20 border-t border-white/5 flex flex-wrap gap-3 justify-center sm:justify-between items-center">
+             <div className="flex gap-2">
+               <HeaderBtn onClick={fetchSheetData} icon={<RefreshCcw size={16} className={loading ? 'animate-spin' : ''}/>} label="Refresh" />
+               <HeaderBtn onClick={() => { setZoom(1); setPanOffset(0); }} icon={<Maximize size={16}/>} label="Reset" primary />
+             </div>
+             <div className="flex gap-2">
+               <NavBtn onClick={() => setZoom(z => Math.min(30, z * 1.5))} icon={<ZoomIn size={18}/>} label="Zoom +" />
+               <NavBtn onClick={() => setZoom(z => Math.max(1, z * 0.7))} icon={<ZoomOut size={18}/>} label="Zoom -" />
+             </div>
+          </div>
+
+          {/* Info Footer */}
+          <div className="px-4 sm:px-10 py-4 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-4 text-center sm:text-left">
+             <div className="flex items-center gap-2 text-[8px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest">
                 <Info size={16} className="text-cyan-500 shrink-0"/> Ziehen zum Bewegen • Pinch zum Zoomen
              </div>
              <div className="text-[9px] sm:text-xs font-black text-cyan-400 bg-cyan-400/10 px-3 py-1 rounded-full border border-cyan-400/20">
@@ -304,7 +313,7 @@ const App = () => {
         </div>
 
         <footer className="text-center pb-12 opacity-30">
-           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Vaillant Dashboard v3.4 • Premium Live</p>
+           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Vaillant Dashboard v3.7 • Premium Live</p>
         </footer>
       </div>
     </div>
@@ -319,30 +328,30 @@ const StatCard = ({ title, value, unit, icon, color, isStatus, trend }) => {
     emerald: "from-emerald-500/10 to-emerald-950/5 border-emerald-500/20"
   };
   return (
-    <div className={`relative overflow-hidden bg-gradient-to-br ${colors[color]} border p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] group transition-all`}>
+    <div className={`relative overflow-hidden bg-gradient-to-br ${colors[color]} border p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] group transition-all shadow-xl`}>
       <div className="flex justify-between items-start mb-3 sm:mb-4">
         <div className="p-2.5 sm:p-3 bg-slate-900/60 rounded-xl border border-white/5">{icon}</div>
-        {isStatus && <div className="flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-full text-[9px] font-black uppercase border border-emerald-500/20 tracking-tighter">Online</div>}
+        {isStatus && <div className={`flex items-center gap-1.5 bg-${color}-500/20 text-${color}-400 px-2.5 py-1 rounded-full text-[9px] font-black uppercase border border-${color}-500/20 tracking-tighter`}>{value}</div>}
       </div>
       <p className="text-slate-500 text-[10px] sm:text-xs font-black uppercase tracking-wider mb-1 truncate">{title}</p>
       <div className="flex items-baseline gap-1.5 sm:gap-2">
         <span className="text-xl sm:text-4xl font-black text-white tracking-tighter">
           {typeof value === 'number' ? value.toLocaleString('de-DE', { maximumFractionDigits: 0 }) : value}
         </span>
-        <span className="text-slate-600 font-bold text-[10px] sm:text-sm uppercase">{unit}</span>
+        <span className="text-slate-600 font-bold text-[10px] sm:text-sm uppercase tracking-tighter">{unit}</span>
       </div>
     </div>
   );
 };
 
 const HeaderBtn = ({ onClick, icon, label, primary }) => (
-  <button onClick={onClick} className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl sm:rounded-2xl font-black text-[11px] sm:text-xs uppercase tracking-widest transition-all active:scale-95 border ${primary ? 'bg-cyan-600 border-cyan-400 text-white shadow-lg' : 'bg-slate-900/60 border-white/10 text-slate-400'}`}>
+  <button onClick={onClick} className={`flex items-center justify-center gap-2 px-4 py-2.5 sm:px-6 sm:py-3 rounded-xl sm:rounded-2xl font-black text-[11px] sm:text-xs uppercase tracking-widest transition-all active:scale-95 border ${primary ? 'bg-cyan-600 border-cyan-400 text-white shadow-lg' : 'bg-slate-900/60 border-white/10 text-slate-400'}`}>
     {icon} <span>{label}</span>
   </button>
 );
 
 const NavBtn = ({ onClick, icon, label, active = true }) => (
-  <button onClick={onClick} disabled={!active} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl sm:rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all border ${active ? 'bg-slate-800 border-white/10 text-white' : 'opacity-20 border-transparent text-slate-600'}`}>
+  <button onClick={onClick} disabled={!active} className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 sm:px-5 sm:py-3 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-[11px] uppercase tracking-widest transition-all border ${active ? 'bg-slate-800 border-white/10 text-white hover:bg-slate-700 active:scale-95' : 'opacity-20 border-transparent text-slate-600'}`}>
     {icon} <span>{label}</span>
   </button>
 );
