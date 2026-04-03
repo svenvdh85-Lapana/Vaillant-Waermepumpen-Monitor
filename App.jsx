@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 
 /**
- * Vaillant Premium Monitor - V4.6
- * Fix: Bereinigte SVG-Gradienten-Attribute & Optimierte Abtauerkennung
+ * Vaillant Premium Monitor - V4.7
+ * Update: Robustere Abtauerkennung & Fix der SVG-Gradienten
  */
 
 const App = () => {
@@ -78,10 +78,10 @@ const App = () => {
     return allData.slice(start, end);
   }, [allData, viewIndex]);
 
-  // --- Erweiterte Zyklen-Analyse (Starts & Abtauen) ---
+  // --- Optimierte Zyklen-Analyse (Robustere Abtauerkennung) ---
   const cycleStats = useMemo(() => {
     const stats = { starts: 0, defrosts: 0, defrostIndices: [] };
-    if (currentWindowData.length < 3) return stats;
+    if (currentWindowData.length < 5) return stats;
 
     let idleMin = 0; 
     let compressorActive = false;
@@ -103,14 +103,22 @@ const App = () => {
         idleMin = 0;
       }
 
-      // 2. Verbesserte Abtauerkennung (Muster: Betrieb -> Drop -> Peak)
-      const isNormalBefore = prevPrev > 400;
-      const isDrop = prev < 350; 
-      const isMassivePeak = current > 1800;
+      // 2. FLEXIBLE ABTAUERKENNUNG
+      // Bedingung A: Massiver Peak (> 1700W)
+      // Bedingung B: Vorheriger Einbruch innerhalb der letzten 2 Datenpunkte (< 550W)
+      // Bedingung C: Der Sprung muss signifikant sein (> 1000W Differenz)
+      
+      const isMassivePeak = current > 1700;
+      const hadRecentDrop = prev < 550 || prevPrev < 550;
+      const isSignificantJump = (current - prev > 1000) || (current - prevPrev > 1000);
 
-      if (isNormalBefore && isDrop && isMassivePeak) {
-        stats.defrosts++;
-        stats.defrostIndices.push(currentWindowData[i].id);
+      if (isMassivePeak && hadRecentDrop && isSignificantJump) {
+        // Dubletten-Schutz: Nicht zwei Peaks innerhalb von 5 Minuten zählen
+        const lastIndex = stats.defrostIndices[stats.defrostIndices.length - 1];
+        if (!lastIndex || (currentWindowData[i].id - lastIndex > 5)) {
+          stats.defrosts++;
+          stats.defrostIndices.push(currentWindowData[i].id);
+        }
       }
     }
     return stats;
@@ -119,7 +127,7 @@ const App = () => {
   const systemStatus = useMemo(() => {
     if (allData.length === 0) return { label: "Offline", color: "rose" };
     const lastValue = allData[allData.length - 1].value;
-    if (lastValue > 2000) return { label: "Abtauen", color: "orange" };
+    if (lastValue > 1700) return { label: "Abtauen", color: "orange" };
     if (lastValue > 200) return { label: "Heizen", color: "emerald" };
     if (lastValue < 100) return { label: "Standby", color: "cyan" };
     return { label: "Normal", color: "emerald" };
@@ -144,12 +152,11 @@ const App = () => {
     
     const points = visibleData.map((d, i) => ({ x: getX(i), y: getY(d.value), data: d }));
     
-    // Abtau-Regionen basierend auf global erkannten IDs
+    // Markierung der Abtauvorgänge im Chart
     const defrostRects = [];
     visibleData.forEach((d, i) => {
       if (cycleStats.defrostIndices.includes(d.id)) {
-        const xPos = getX(i);
-        defrostRects.push({ x: xPos - 5, width: 10 });
+        defrostRects.push({ x: getX(i) - 5, width: 10 });
       }
     });
 
@@ -254,7 +261,7 @@ const App = () => {
                 <Calendar size={12} className="text-cyan-500" /> 
                 {currentWindowData.length > 0 ? currentWindowData[0].time.toLocaleDateString() : '--'}
                 <div className="w-1 h-1 bg-cyan-500 rounded-full animate-pulse"></div>
-                Monitor V4.6
+                Monitor V4.7
               </div>
             </div>
           </div>
@@ -264,7 +271,6 @@ const App = () => {
           <StatCard title="Status" value={systemStatus.label} unit="" icon={<Activity className={`text-${systemStatus.color}-400`} />} color={systemStatus.color} isStatus trend="Live" />
           <StatCard title="Ø-Leistung" value={chartMetrics ? chartMetrics.avg : 0} unit="W" icon={<BarChart3 className="text-amber-400" />} color="amber" />
           
-          {/* Kombinierte Takte/Abtauen Kachel */}
           <div className="relative overflow-hidden bg-gradient-to-br from-cyan-500/10 to-cyan-950/5 border-cyan-500/20 border p-2.5 sm:p-6 rounded-[1rem] sm:rounded-[2rem] shadow-xl">
              <div className="flex justify-between items-start mb-1.5 sm:mb-4">
                 <div className="p-1.5 sm:p-3 bg-slate-900/60 rounded-lg border border-white/5 text-cyan-400"><RotateCcw size={20}/></div>
@@ -334,9 +340,8 @@ const App = () => {
                   </g>
                 ))}
 
-                {/* Markierung der Abtauvorgänge basierend auf erkannten IDs */}
                 {chartMetrics.defrostRects.map((r, idx) => (
-                    <rect key={idx} x={r.x} y={chartMetrics.margin.top} width={r.width} height={chartMetrics.cH} fill="#f97316" fillOpacity="0.3" filter="url(#glow)" />
+                    <rect key={idx} x={r.x} y={chartMetrics.margin.top} width={r.width} height={chartMetrics.cH} fill="#f97316" fillOpacity="0.35" filter="url(#glow)" />
                 ))}
 
                 <path d={chartMetrics.areaD} fill="url(#areaGrad)" />
@@ -376,7 +381,7 @@ const App = () => {
 
           <div className="px-3 sm:px-10 py-1 sm:py-4 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-1.5 sm:gap-4 text-center sm:text-left">
              <div className="flex items-center gap-2 text-[7px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest">
-                <Info size={12} className="text-cyan-500 shrink-0"/> Orange Markierungen: Erkannte Abtauvorgänge • Pinch zum Zoomen
+                <Info size={12} className="text-cyan-500 shrink-0"/> Optimierte Erkennung: Orange Balken markieren Abtau-Peaks
              </div>
              <div className="text-[8px] sm:text-xs font-black text-cyan-400 bg-cyan-400/5 px-2 py-0.5 rounded-full border border-cyan-400/20">
                {timeRangeLabel}
@@ -385,7 +390,7 @@ const App = () => {
         </div>
 
         <footer className="text-center pb-6 opacity-30">
-           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v4.6 • Premium Monitor</p>
+           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v4.7 • Premium Monitor</p>
         </footer>
       </div>
     </div>
