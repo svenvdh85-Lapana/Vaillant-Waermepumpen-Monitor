@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 
 /**
- * Vaillant Premium Monitor - V3.4 (Bulletproof Version)
- * Behebt das Problem der fehlenden Formatierung auf Smartphones.
+ * Vaillant Premium Monitor - V3.5
+ * Layout-Update: Zoom-Buttons über den Graphen verschoben.
  */
 
 const App = () => {
@@ -192,15 +192,9 @@ const App = () => {
             </div>
           </div>
           
-          <div className="flex flex-col gap-2.5 w-full lg:w-auto">
-            <div className="grid grid-cols-2 gap-2.5 sm:flex">
-              <HeaderBtn onClick={fetchSheetData} icon={<RefreshCcw size={16} className={loading ? 'animate-spin' : ''}/>} label="Refresh" />
-              <HeaderBtn onClick={() => { setZoom(1); setPanOffset(0); }} icon={<Maximize size={16}/>} label="Reset" primary />
-            </div>
-            <div className="grid grid-cols-2 gap-2.5">
-              <HeaderBtn onClick={() => setZoom(z => Math.min(30, z * 1.5))} icon={<ZoomIn size={16}/>} label="Zoom +" />
-              <HeaderBtn onClick={() => setZoom(z => Math.max(1, z * 0.7))} icon={<ZoomOut size={16}/>} label="Zoom -" />
-            </div>
+          <div className="flex flex-row gap-2.5 w-full lg:w-auto">
+            <HeaderBtn onClick={fetchSheetData} icon={<RefreshCcw size={16} className={loading ? 'animate-spin' : ''}/>} label="Refresh" />
+            <HeaderBtn onClick={() => { setZoom(1); setPanOffset(0); }} icon={<Maximize size={16}/>} label="Reset" primary />
           </div>
         </header>
 
@@ -215,7 +209,7 @@ const App = () => {
         {/* Main Chart Card */}
         <div className="bg-slate-900/40 backdrop-blur-xl rounded-[1.5rem] sm:rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden mb-10">
           
-          <div className="px-4 sm:px-10 pt-4 sm:pt-10 flex flex-col sm:flex-row justify-between items-center border-b border-white/5 pb-4 sm:pb-6 gap-4">
+          <div className="px-4 sm:px-10 pt-4 sm:pt-10 flex flex-col sm:flex-row justify-between items-center border-b border-white/5 pb-4 sm:pb-6 gap-6">
             <div className="w-full sm:w-auto flex items-center gap-6 sm:gap-8 overflow-x-auto no-scrollbar pb-1">
               {timeIcons.map((item, idx) => (
                 <div key={idx} className="flex flex-col items-center gap-1.5 min-w-[35px]">
@@ -225,9 +219,18 @@ const App = () => {
               ))}
             </div>
             
-            <div className="flex gap-2 w-full sm:w-auto">
-               <NavBtn onClick={() => { setViewIndex(v => v + 1); setZoom(1); setPanOffset(0); }} icon={<ChevronLeft size={20}/>} label="-24h" />
-               <NavBtn onClick={() => { setViewIndex(v => v - 1); setZoom(1); setPanOffset(0); }} icon={<ChevronRight size={20}/>} label="+24h" active={viewIndex > 0} />
+            {/* Nav & Zoom Toolbar über dem Graphen */}
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-end">
+               {/* Zeit Navigation */}
+               <div className="flex gap-2">
+                 <NavBtn onClick={() => { setViewIndex(v => v + 1); setZoom(1); setPanOffset(0); }} icon={<ChevronLeft size={20}/>} label="-24h" />
+                 <NavBtn onClick={() => { setViewIndex(v => v - 1); setZoom(1); setPanOffset(0); }} icon={<ChevronRight size={20}/>} label="+24h" active={viewIndex > 0} />
+               </div>
+               {/* Zoom Controls */}
+               <div className="flex gap-2">
+                 <NavBtn onClick={() => setZoom(z => Math.min(30, z * 1.5))} icon={<ZoomIn size={18}/>} label="Zoom +" />
+                 <NavBtn onClick={() => setZoom(z => Math.max(1, z * 0.7))} icon={<ZoomOut size={18}/>} label="Zoom -" />
+               </div>
             </div>
           </div>
 
@@ -239,7 +242,7 @@ const App = () => {
             onMouseUp={() => isDragging.current = false}
             onMouseLeave={() => isDragging.current = false}
             onTouchStart={(e) => { isDragging.current = true; lastX.current = e.touches[0].clientX; }}
-            onTouchMove={handleMouseMove}
+            onTouchMove={handleMouseMove} 
             onTouchEnd={() => isDragging.current = false}
           >
             {chartMetrics && (
@@ -282,7 +285,7 @@ const App = () => {
                       width="140" 
                       height="85"
                     >
-                      <div className="bg-slate-950/95 border border-white/10 p-3 rounded-2xl shadow-2xl backdrop-blur-xl">
+                      <div className="bg-slate-950/95 border border-white/10 p-2.5 rounded-xl shadow-2xl backdrop-blur-xl">
                         <div className="text-[9px] text-slate-500 font-black uppercase tracking-tighter">{hoveredPoint.data.time.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} Uhr</div>
                         <div className="text-xl font-black text-white">{hoveredPoint.data.value.toFixed(0)}<span className="text-cyan-400 text-xs ml-1 font-normal">W</span></div>
                       </div>
@@ -304,7 +307,7 @@ const App = () => {
         </div>
 
         <footer className="text-center pb-12 opacity-30">
-           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Vaillant Dashboard v3.4 • Premium Live</p>
+           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.4em]">Vaillant Dashboard v3.5 • Premium Live</p>
         </footer>
       </div>
     </div>
@@ -329,7 +332,7 @@ const StatCard = ({ title, value, unit, icon, color, isStatus, trend }) => {
         <span className="text-xl sm:text-4xl font-black text-white tracking-tighter">
           {typeof value === 'number' ? value.toLocaleString('de-DE', { maximumFractionDigits: 0 }) : value}
         </span>
-        <span className="text-slate-600 font-bold text-[10px] sm:text-sm uppercase">{unit}</span>
+        <span className="text-slate-600 font-bold text-[10px] sm:text-sm uppercase tracking-tighter">{unit}</span>
       </div>
     </div>
   );
@@ -342,7 +345,7 @@ const HeaderBtn = ({ onClick, icon, label, primary }) => (
 );
 
 const NavBtn = ({ onClick, icon, label, active = true }) => (
-  <button onClick={onClick} disabled={!active} className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl sm:rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all border ${active ? 'bg-slate-800 border-white/10 text-white' : 'opacity-20 border-transparent text-slate-600'}`}>
+  <button onClick={onClick} disabled={!active} className={`flex items-center justify-center gap-2 px-3 py-2.5 sm:px-5 sm:py-3 rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-[11px] uppercase tracking-widest transition-all border ${active ? 'bg-slate-800 border-white/10 text-white hover:bg-slate-700 active:scale-95' : 'opacity-20 border-transparent text-slate-600'}`}>
     {icon} <span>{label}</span>
   </button>
 );
