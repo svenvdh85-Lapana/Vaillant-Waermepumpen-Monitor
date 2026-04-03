@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createRoot } from 'react-dom/client';
 import { 
   Zap, RefreshCcw, ZoomIn, ZoomOut, Maximize, Info, AlertTriangle, 
   Clock, ChevronLeft, ChevronRight, Calendar, Activity, 
@@ -6,8 +7,8 @@ import {
 } from 'lucide-react';
 
 /**
- * Vaillant Premium Monitor - V3.1
- * Optimierte Kurvendarstellung (Line/Area) im Premium Dark-Design.
+ * Vaillant Premium Monitor - V3.2
+ * Behebt das "White Screen" Problem durch integriertes Rendering.
  */
 
 const App = () => {
@@ -79,7 +80,7 @@ const App = () => {
 
   const chartMetrics = useMemo(() => {
     if (currentWindowData.length === 0) return null;
-    const margin = { top: 60, right: 30, bottom: 60, left: 70 };
+    const margin = { top: 60, right: 30, bottom: 60, left: 75 };
     const width = 1000; const height = 500;
     const cW = width - margin.left - margin.right;
     const cH = height - margin.top - margin.bottom;
@@ -98,7 +99,6 @@ const App = () => {
     const points = visibleData.map((d, i) => ({ x: getX(i), y: getY(d.value), data: d }));
     const avgY = getY(avg);
 
-    // Pfad für die Linie und die Fläche
     let pathD = "";
     let areaD = "";
     if (points.length > 1) {
@@ -147,15 +147,12 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-[#020617] text-slate-100 font-sans p-3 sm:p-6 md:p-10 overflow-x-hidden relative">
-      {/* Hintergrund Dekoration */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-20">
          <div className="absolute -top-[20%] -left-[10%] w-[60%] h-[60%] bg-cyan-900 rounded-full blur-[150px]"></div>
          <div className="absolute -bottom-[20%] -right-[10%] w-[50%] h-[50%] bg-blue-900 rounded-full blur-[150px]"></div>
       </div>
 
       <div className="max-w-7xl mx-auto relative z-10">
-        
-        {/* Header */}
         <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6">
           <div className="flex items-center gap-4 sm:gap-6">
             <div className="p-4 bg-gradient-to-tr from-cyan-600 to-blue-700 rounded-2xl shadow-[0_0_40px_rgba(8,145,178,0.3)] border border-cyan-400/30">
@@ -185,17 +182,14 @@ const App = () => {
           </div>
         </header>
 
-        {/* Statistik Raster */}
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
           <StatCard title="Peak (24h)" value={currentWindowData.length > 0 ? Math.max(...currentWindowData.map(d => d.value)) : 0} unit="W" icon={<TrendingUp className="text-rose-400" />} color="rose" />
           <StatCard title="Ø-Leistung (24h)" value={chartMetrics ? chartMetrics.avg : 0} unit="W" icon={<BarChart3 className="text-amber-400" />} color="amber" />
           <StatCard title="Takte (24h)" value={cycleStats} unit="Starts" icon={<RotateCcw className="text-cyan-400" />} color="cyan" />
-          <StatCard title="Status" value="Normal" unit="" icon={<Activity className="text-emerald-400" />} color="emerald" isStatus />
+          <StatCard title="Status" value="Normal" unit="" icon={<Activity className="text-emerald-400" />} color="emerald" isStatus trend="Online" />
         </section>
 
-        {/* Haupt-Grafik */}
         <div className="bg-slate-900/60 backdrop-blur-2xl rounded-[2rem] sm:rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden mb-10">
-          
           <div className="px-6 sm:px-10 pt-6 sm:pt-10 flex flex-col sm:flex-row justify-between items-center border-b border-white/5 pb-6 gap-6">
             <div className="w-full sm:w-auto flex items-center gap-8 overflow-x-auto no-scrollbar pb-2 sm:pb-0">
               {timeIcons.map((item, idx) => (
@@ -205,7 +199,6 @@ const App = () => {
                 </div>
               ))}
             </div>
-            
             <div className="flex gap-3 w-full sm:w-auto">
                <NavBtn onClick={() => { setViewIndex(v => v + 1); setZoom(1); }} icon={<ChevronLeft size={22}/>} label="-24h" />
                <NavBtn onClick={() => { setViewIndex(v => v - 1); setZoom(1); }} icon={<ChevronRight size={22}/>} label="+24h" active={viewIndex > 0} />
@@ -235,28 +228,19 @@ const App = () => {
                     <feComposite in="SourceGraphic" in2="blur" operator="over" />
                   </filter>
                 </defs>
-
-                <text transform={`translate(20, ${chartMetrics.height / 2}) rotate(-90)`} textAnchor="middle" className="text-[10px] fill-white/20 font-black uppercase tracking-[0.4em]">Leistung in Watt</text>
-
-                {/* Gitter */}
+                <text transform={`translate(25, ${chartMetrics.height / 2}) rotate(-90)`} textAnchor="middle" className="text-[10px] fill-white/20 font-black uppercase tracking-[0.4em]">Leistung in Watt</text>
                 {[0, 0.25, 0.5, 0.75, 1].map(p => (
                   <g key={p}>
                     <line x1={chartMetrics.margin.left} x2={chartMetrics.width - chartMetrics.margin.right} y1={chartMetrics.margin.top + chartMetrics.cH * (1-p)} y2={chartMetrics.margin.top + chartMetrics.cH * (1-p)} stroke="white" strokeOpacity="0.05" strokeWidth="1" />
                     <text x={chartMetrics.margin.left - 15} y={chartMetrics.margin.top + chartMetrics.cH * (1-p) + 4} textAnchor="end" className="text-[12px] fill-slate-500 font-bold">{(chartMetrics.maxVal * p).toFixed(0)}</text>
                   </g>
                 ))}
-
-                {/* Kurve - Zurück zur Linien/Flächen-Darstellung */}
                 <path d={chartMetrics.areaD} fill="url(#areaGrad)" />
                 <path d={chartMetrics.pathD} fill="none" stroke="#22d3ee" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" filter="url(#glow)" />
-
-                {/* Durchschnittslinie (Mittelwert) */}
                 <g filter="url(#glow)">
                   <line x1={chartMetrics.margin.left} x2={chartMetrics.width - chartMetrics.margin.right} y1={chartMetrics.avgY} y2={chartMetrics.avgY} stroke="#f59e0b" strokeWidth="3" strokeDasharray="10,5" />
-                  <text x={chartMetrics.width - chartMetrics.margin.right} y={chartMetrics.avgY - 10} textAnchor="end" className="text-[11px] fill-amber-400 font-black uppercase tracking-wider">Ø-Leistung: {chartMetrics.avg.toFixed(0)} W</text>
+                  <text x={chartMetrics.width - chartMetrics.margin.right} y={chartMetrics.avgY - 10} textAnchor="end" className="text-[11px] fill-amber-400 font-black uppercase tracking-wider shadow-sm">Ø-Leistung (24h): {chartMetrics.avg.toFixed(0)} W</text>
                 </g>
-
-                {/* Tooltip bei Interaktion */}
                 {hoveredPoint && (
                   <g>
                     <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={chartMetrics.margin.top} y2={chartMetrics.height - chartMetrics.margin.bottom} stroke="white" strokeOpacity="0.2" strokeWidth="1" />
@@ -280,7 +264,7 @@ const App = () => {
         </div>
 
         <footer className="text-center pb-12 opacity-40">
-           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.5em]">System-ID: {SHEET_ID.slice(0,8)} • Vaillant Dashboard v3.1</p>
+           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.5em]">System-ID: {SHEET_ID.slice(0,8)} • Vaillant Dashboard v3.2</p>
         </footer>
       </div>
     </div>
@@ -322,5 +306,16 @@ const NavBtn = ({ onClick, icon, label, active = true }) => (
     {icon} {label}
   </button>
 );
+
+// --- RENDERING BLOCK FÜR ECHTE BROWSER (Vite/Vercel) ---
+const container = document.getElementById('root');
+if (container) {
+    // Verhindert mehrfaches Rendern in Vorschau-Umgebungen
+    if (!window.__app_rendered) {
+        window.__app_rendered = true;
+        const root = createRoot(container);
+        root.render(<App />);
+    }
+}
 
 export default App;
