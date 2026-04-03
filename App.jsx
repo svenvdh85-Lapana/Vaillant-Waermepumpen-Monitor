@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
-  Zap, RefreshCcw, ZoomIn, ZoomOut, Maximize, Info, AlertTriangle, 
+  RefreshCcw, ZoomIn, ZoomOut, Maximize, Info, AlertTriangle, 
   Clock, ChevronLeft, ChevronRight, Calendar, Activity, 
   TrendingUp, BarChart3, Sun, Moon, RotateCcw 
 } from 'lucide-react';
 
 /**
- * Vaillant Premium Monitor - V3.9
- * Layout-Update: Maximale Kompaktheit für Mobile (Abstände unter der X-Achse minimiert).
+ * Vaillant Premium Monitor - V4.2
+ * Update: Titel "Arotherm Plus 75/6" in Vaillant-Grün fixiert.
+ * Enthält: Status-Logik, Takt-Analyse, mobile Platzoptimierung.
  */
 
 const App = () => {
@@ -29,7 +30,7 @@ const App = () => {
   const GID = '0';
   const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
 
-  // Initialisierung: Stellt sicher, dass CSS geladen wird
+  // Initialisierung & Styling-Fixes
   useEffect(() => {
     if (!document.getElementById('tailwind-cdn')) {
       const script = document.createElement('script');
@@ -84,13 +85,9 @@ const App = () => {
   const systemStatus = useMemo(() => {
     if (allData.length === 0) return { label: "Offline", color: "rose" };
     const lastValue = allData[allData.length - 1].value;
-    
-    if (lastValue > 200) {
-      return { label: "Heizen", color: "emerald", active: true };
-    } else if (lastValue < 100) {
-      return { label: "Standby", color: "cyan", active: false };
-    }
-    return { label: "Normal", color: "emerald", active: false };
+    if (lastValue > 200) return { label: "Heizen", color: "emerald" };
+    if (lastValue < 100) return { label: "Standby", color: "cyan" };
+    return { label: "Normal", color: "emerald" };
   }, [allData]);
 
   const cycleStats = useMemo(() => {
@@ -110,34 +107,26 @@ const App = () => {
   const chartMetrics = useMemo(() => {
     if (currentWindowData.length === 0) return null;
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
-    // Margins weiter reduziert für Mobile (bottom: 25 statt 40)
     const margin = { top: 40, right: 25, bottom: isMobile ? 25 : 40, left: isMobile ? 55 : 80 };
-    const width = 1000; 
-    const height = 500;
+    const width = 1000; const height = 500;
     const cW = width - margin.left - margin.right;
     const cH = height - margin.top - margin.bottom;
-
     const values = currentWindowData.map(d => d.value);
     const avg = values.reduce((a, b) => a + b, 0) / (values.length || 1);
     const maxVal = Math.max(...values, avg, 100) * 1.1; 
-    
     const visibleCount = Math.max(10, Math.floor(currentWindowData.length / zoom));
     const startIdx = Math.floor(panOffset * (currentWindowData.length - visibleCount));
     const visibleData = currentWindowData.slice(startIdx, startIdx + visibleCount);
-
     const getX = (i) => margin.left + (i / (visibleCount - 1)) * cW;
     const getY = (v) => margin.top + cH - (v / maxVal) * cH;
-
     const points = visibleData.map((d, i) => ({ x: getX(i), y: getY(d.value), data: d }));
     const avgY = getY(avg);
-
     let pathD = ""; let areaD = "";
     if (points.length > 1) {
       pathD = `M ${points[0].x} ${points[0].y}`;
       for (let i = 1; i < points.length; i++) pathD += ` L ${points[i].x} ${points[i].y}`;
       areaD = `${pathD} L ${points[points.length - 1].x} ${margin.top + cH} L ${points[0].x} ${margin.top + cH} Z`;
     }
-
     return { points, pathD, areaD, margin, width, height, cW, cH, maxVal, visibleData, avg, avgY };
   }, [currentWindowData, zoom, panOffset]);
 
@@ -176,24 +165,17 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-[#020617] text-slate-100 font-sans p-2 sm:p-6 md:p-10 overflow-x-hidden relative">
-      
-      {/* Dynamic Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none opacity-20">
          <div className="absolute -top-[10%] -left-[10%] w-[50%] h-[50%] bg-cyan-900 rounded-full blur-[120px]"></div>
          <div className="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-blue-900 rounded-full blur-[120px]"></div>
       </div>
 
       <div className="max-w-7xl mx-auto relative z-10">
-        
-        {/* Header - Kompakter für Mobile */}
         <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-4 sm:mb-8 gap-4 sm:gap-6">
           <div className="flex items-center gap-3 sm:gap-6 w-full lg:w-auto">
-            <div className="p-2 sm:p-4 bg-gradient-to-tr from-cyan-600 to-blue-700 rounded-xl sm:rounded-2xl shadow-xl border border-cyan-400/20">
-              <Zap className="text-white fill-white/10" size={24} />
-            </div>
             <div className="flex-1">
               <h1 className="text-xl sm:text-4xl font-black tracking-tight text-white uppercase italic">
-                Vaillant <span className="text-cyan-400 not-italic">Arotherm Plus 75/6</span>
+                Vaillant <span style={{ color: '#008f7a' }} className="not-italic">Arotherm Plus 75/6</span>
               </h1>
               <div className="flex items-center gap-2 text-slate-400 text-[10px] sm:text-sm mt-0.5 font-bold">
                 <Calendar size={12} className="text-cyan-500" /> 
@@ -205,7 +187,7 @@ const App = () => {
           </div>
         </header>
 
-        {/* Info Cards */}
+        {/* Statistik Karten - Status zuerst, Peak zuletzt */}
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-6 mb-4 sm:mb-8">
           <StatCard title="Status" value={systemStatus.label} unit="" icon={<Activity className={`text-${systemStatus.color}-400`} />} color={systemStatus.color} isStatus trend="Live" />
           <StatCard title="Ø-Leistung" value={chartMetrics ? chartMetrics.avg : 0} unit="W" icon={<BarChart3 className="text-amber-400" />} color="amber" />
@@ -213,10 +195,7 @@ const App = () => {
           <StatCard title="Peak (24h)" value={currentWindowData.length > 0 ? Math.max(...currentWindowData.map(d => d.value)) : 0} unit="W" icon={<TrendingUp className="text-rose-400" />} color="rose" />
         </section>
 
-        {/* Main Chart Card */}
         <div className="bg-slate-900/40 backdrop-blur-xl rounded-[1.2rem] sm:rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden mb-6 sm:mb-10">
-          
-          {/* Top Toolbar (Zeitnavigation) */}
           <div className="px-3 sm:px-10 pt-3 sm:pt-10 flex flex-col sm:flex-row justify-between items-center border-b border-white/5 pb-3 sm:pb-6 gap-3">
             <div className="w-full sm:w-auto flex items-center gap-4 sm:gap-8 overflow-x-auto no-scrollbar pb-1">
               {timeIcons.map((item, idx) => (
@@ -226,14 +205,12 @@ const App = () => {
                 </div>
               ))}
             </div>
-            
             <div className="flex gap-2 w-full sm:w-auto justify-end">
                <NavBtn onClick={() => { setViewIndex(v => v + 1); setZoom(1); setPanOffset(0); }} icon={<ChevronLeft size={18}/>} label="-24h" />
                <NavBtn onClick={() => { setViewIndex(v => v - 1); setZoom(1); setPanOffset(0); }} icon={<ChevronRight size={18}/>} label="+24h" active={viewIndex > 0} />
             </div>
           </div>
 
-          {/* SVG Container - Mobile Höhe leicht reduziert für besseren Fit */}
           <div 
             className="w-full h-[300px] sm:h-[550px] relative cursor-crosshair touch-none select-none" 
             ref={containerRef}
@@ -257,24 +234,19 @@ const App = () => {
                     <feComposite in="SourceGraphic" in2="blur" operator="over" />
                   </filter>
                 </defs>
-
                 <text transform={`translate(20, ${chartMetrics.height / 2}) rotate(-90)`} textAnchor="middle" className="text-[9px] fill-white/20 font-black uppercase tracking-[0.4em]">Leistung in Watt</text>
-
                 {[0, 0.25, 0.5, 0.75, 1].map(p => (
                   <g key={p}>
                     <line x1={chartMetrics.margin.left} x2={chartMetrics.width - chartMetrics.margin.right} y1={chartMetrics.margin.top + chartMetrics.cH * (1-p)} y2={chartMetrics.margin.top + chartMetrics.cH * (1-p)} stroke="white" strokeOpacity="0.05" strokeWidth="1" />
                     <text x={chartMetrics.margin.left - 12} y={chartMetrics.margin.top + chartMetrics.cH * (1-p) + 4} textAnchor="end" className="text-[10px] sm:text-[12px] fill-slate-500 font-bold">{(chartMetrics.maxVal * p).toFixed(0)}</text>
                   </g>
                 ))}
-
                 <path d={chartMetrics.areaD} fill="url(#areaGrad)" />
                 <path d={chartMetrics.pathD} fill="none" stroke="#22d3ee" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" filter="url(#glow)" />
-
                 <g filter="url(#glow)">
                   <line x1={chartMetrics.margin.left} x2={chartMetrics.width - chartMetrics.margin.right} y1={chartMetrics.avgY} y2={chartMetrics.avgY} stroke="#f59e0b" strokeWidth="3" strokeDasharray="10,5" />
-                  <text x={chartMetrics.width - chartMetrics.margin.right} y={chartMetrics.avgY - 10} textAnchor="end" className="text-[9px] sm:text-[10px] fill-amber-400 font-black uppercase tracking-wider">Ø: {chartMetrics.avg.toFixed(0)} W</text>
+                  <text x={chartMetrics.width - chartMetrics.margin.right} y={chartMetrics.avgY - 10} textAnchor="end" className="text-[9px] sm:text-[10px] fill-amber-400 font-black uppercase tracking-wider shadow-sm">Ø: {chartMetrics.avg.toFixed(0)} W</text>
                 </g>
-
                 {hoveredPoint && (
                   <g>
                     <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={chartMetrics.margin.top} y2={chartMetrics.height - chartMetrics.margin.bottom} stroke="white" strokeOpacity="0.2" strokeWidth="1" />
@@ -291,7 +263,6 @@ const App = () => {
             )}
           </div>
           
-          {/* Untere Aktionsleiste (Refresh, Reset, Zoom) - Padding maximal reduziert (py-1.5) */}
           <div className="px-3 sm:px-10 py-1.5 sm:py-5 bg-slate-800/20 border-t border-white/5 flex flex-wrap gap-2 sm:gap-3 justify-center sm:justify-between items-center">
              <div className="flex gap-2">
                <HeaderBtn onClick={fetchSheetData} icon={<RefreshCcw size={14} className={loading ? 'animate-spin' : ''}/>} label="Refresh" />
@@ -303,19 +274,18 @@ const App = () => {
              </div>
           </div>
 
-          {/* Info Footer - Padding maximal reduziert (py-1) */}
           <div className="px-3 sm:px-10 py-1 sm:py-4 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-1.5 sm:gap-4 text-center sm:text-left">
              <div className="flex items-center gap-2 text-[7px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest">
                 <Info size={12} className="text-cyan-500 shrink-0"/> Ziehen zum Bewegen • Pinch zum Zoomen
              </div>
-             <div className="text-[8px] sm:text-xs font-black text-cyan-400 bg-cyan-400/5 px-2 py-0.5 rounded-full border border-cyan-400/10">
+             <div className="text-[8px] sm:text-xs font-black text-cyan-400 bg-cyan-400/5 px-2 py-0.5 rounded-full border border-cyan-400/20">
                {timeRangeLabel}
              </div>
           </div>
         </div>
 
         <footer className="text-center pb-6 opacity-30">
-           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v3.9 • Premium Live</p>
+           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v4.2 • Premium Monitor</p>
         </footer>
       </div>
     </div>
@@ -358,7 +328,6 @@ const NavBtn = ({ onClick, icon, label, active = true }) => (
   </button>
 );
 
-// --- RENDERING BLOCK FÜR ECHTE BROWSER ---
 const container = document.getElementById('root');
 if (container && !window.__app_rendered) {
     window.__app_rendered = true;
