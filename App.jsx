@@ -3,12 +3,12 @@ import { createRoot } from 'react-dom/client';
 import { 
   RefreshCcw, ZoomIn, ZoomOut, Maximize, Info, AlertTriangle, 
   Clock, ChevronLeft, ChevronRight, Calendar, Activity, 
-  TrendingUp, BarChart3, Sun, Moon, RotateCcw 
+  TrendingUp, BarChart3, Sun, Moon, RotateCcw, Wind 
 } from 'lucide-react';
 
 /**
- * Vaillant Premium Monitor - V4.3
- * Update: Optimierte Touch-Gesten für flüssiges Verschieben und Pinch-to-Zoom.
+ * Vaillant Premium Monitor - V4.4
+ * Update: Integration der Abtauerkennung (Muster: Drop + Peak)
  */
 
 const App = () => {
@@ -23,7 +23,7 @@ const App = () => {
   const containerRef = useRef(null);
   const isDragging = useRef(false);
   const lastX = useRef(0);
-  const lastTouchDist = useRef(0); // Für Pinch-to-Zoom
+  const lastTouchDist = useRef(0);
 
   const POINTS_PER_PAGE = 1440; 
   const SHEET_ID = '19PhTnQKksVQL_902Oi7lDEH2KhqaYUFoqL8WZfkEskc';
@@ -78,27 +78,50 @@ const App = () => {
     return allData.slice(start, end);
   }, [allData, viewIndex]);
 
+  // --- Erweiterte Zyklen-Analyse (Starts & Abtauen) ---
+  const cycleStats = useMemo(() => {
+    const stats = { starts: 0, defrosts: 0 };
+    if (currentWindowData.length < 3) return stats;
+
+    let idleMin = 0; 
+    let compressorActive = false;
+
+    for (let i = 1; i < currentWindowData.length; i++) {
+      const current = currentWindowData[i].value;
+      const prev = currentWindowData[i - 1].value;
+
+      // 1. Reguläre Verdichterstarts (Deine Logik)
+      if (current < 100) {
+        idleMin++; 
+        if (idleMin >= 15) compressorActive = false;
+      } else if (current > 500) {
+        if (!compressorActive && idleMin >= 15) { 
+          stats.starts++; 
+          compressorActive = true; 
+        }
+        idleMin = 0;
+      }
+
+      // 2. Abtauerkennung (Muster: Drop + Peak)
+      if (i < currentWindowData.length - 1) {
+        const next = currentWindowData[i + 1].value;
+        // Kriterium: Vorher Betrieb (>400), jetzt Einbruch (<300), danach massiver Peak (>2000)
+        if (prev > 400 && current < 300 && next > 2000) {
+          stats.defrosts++;
+        }
+      }
+    }
+    return stats;
+  }, [currentWindowData]);
+
   const systemStatus = useMemo(() => {
     if (allData.length === 0) return { label: "Offline", color: "rose" };
     const lastValue = allData[allData.length - 1].value;
+    if (lastValue > 2000) return { label: "Abtauen", color: "orange" };
     if (lastValue > 200) return { label: "Heizen", color: "emerald" };
     if (lastValue < 100) return { label: "Standby", color: "cyan" };
     return { label: "Normal", color: "emerald" };
   }, [allData]);
-
-  const cycleStats = useMemo(() => {
-    if (currentWindowData.length === 0) return 0;
-    let count = 0; let idleMin = 0; let active = false;
-    currentWindowData.forEach(d => {
-      if (d.value < 100) {
-        idleMin++; if (idleMin >= 15) active = false;
-      } else if (d.value > 500) {
-        if (!active && idleMin >= 15) { count++; active = true; }
-        idleMin = 0;
-      }
-    });
-    return count;
-  }, [currentWindowData]);
 
   const chartMetrics = useMemo(() => {
     if (currentWindowData.length === 0) return null;
@@ -113,9 +136,20 @@ const App = () => {
     const visibleCount = Math.max(10, Math.floor(currentWindowData.length / zoom));
     const startIdx = Math.floor(panOffset * (currentWindowData.length - visibleCount));
     const visibleData = currentWindowData.slice(startIdx, startIdx + visibleCount);
+    
     const getX = (i) => margin.left + (i / (visibleCount - 1)) * cW;
     const getY = (v) => margin.top + cH - (v / maxVal) * cH;
+    
     const points = visibleData.map((d, i) => ({ x: getX(i), y: getY(d.value), data: d }));
+    
+    // Abtau-Regionen für den Chart berechnen
+    const defrostRects = [];
+    for(let i = 1; i < visibleData.length - 1; i++) {
+        if (visibleData[i-1].value > 400 && visibleData[i].value < 300 && visibleData[i+1].value > 2000) {
+            defrostRects.push({ x: getX(i), width: getX(i+1) - getX(i) });
+        }
+    }
+
     const avgY = getY(avg);
     let pathD = ""; let areaD = "";
     if (points.length > 1) {
@@ -123,7 +157,7 @@ const App = () => {
       for (let i = 1; i < points.length; i++) pathD += ` L ${points[i].x} ${points[i].y}`;
       areaD = `${pathD} L ${points[points.length - 1].x} ${margin.top + cH} L ${points[0].x} ${margin.top + cH} Z`;
     }
-    return { points, pathD, areaD, margin, width, height, cW, cH, maxVal, visibleData, avg, avgY };
+    return { points, pathD, areaD, margin, width, height, cW, cH, maxVal, visibleData, avg, avgY, defrostRects };
   }, [currentWindowData, zoom, panOffset]);
 
   const timeIcons = useMemo(() => {
@@ -137,7 +171,6 @@ const App = () => {
      return icons;
   }, [chartMetrics]);
 
-  // Verbessertes Touch-Handling
   const handleTouchStart = (e) => {
     isDragging.current = true;
     if (e.touches.length === 1) {
@@ -153,15 +186,12 @@ const App = () => {
 
   const handleTouchMove = (e) => {
     if (!isDragging.current) return;
-
     if (e.touches.length === 1) {
-      // Panning mit erhöhter Sensitivität (0.008 statt 0.002)
       const currentX = e.touches[0].clientX;
       const deltaX = lastX.current - currentX;
       setPanOffset(p => Math.max(0, Math.min(1, p + (deltaX * 0.008 / zoom))));
       lastX.current = currentX;
     } else if (e.touches.length === 2) {
-      // Pinch-to-Zoom Logik
       const dist = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
         e.touches[0].clientY - e.touches[1].clientY
@@ -172,8 +202,6 @@ const App = () => {
       }
       lastTouchDist.current = dist;
     }
-
-    // Tooltip-Logik für Touch
     if (containerRef.current && chartMetrics) {
       const rect = containerRef.current.getBoundingClientRect();
       const touchX = e.touches[0].clientX;
@@ -223,7 +251,7 @@ const App = () => {
                 <Calendar size={12} className="text-cyan-500" /> 
                 {currentWindowData.length > 0 ? currentWindowData[0].time.toLocaleDateString() : '--'}
                 <div className="w-1 h-1 bg-cyan-500 rounded-full animate-pulse"></div>
-                Monitor
+                Monitor V4.4
               </div>
             </div>
           </div>
@@ -232,7 +260,26 @@ const App = () => {
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-6 mb-4 sm:mb-8">
           <StatCard title="Status" value={systemStatus.label} unit="" icon={<Activity className={`text-${systemStatus.color}-400`} />} color={systemStatus.color} isStatus trend="Live" />
           <StatCard title="Ø-Leistung" value={chartMetrics ? chartMetrics.avg : 0} unit="W" icon={<BarChart3 className="text-amber-400" />} color="amber" />
-          <StatCard title="Takte (24h)" value={cycleStats} unit="Starts" icon={<RotateCcw className="text-cyan-400" />} color="cyan" />
+          
+          {/* Kombinierte Takte/Abtauen Kachel */}
+          <div className="relative overflow-hidden bg-gradient-to-br from-cyan-500/10 to-cyan-950/5 border-cyan-500/20 border p-2.5 sm:p-6 rounded-[1rem] sm:rounded-[2rem] shadow-xl">
+             <div className="flex justify-between items-start mb-1.5 sm:mb-4">
+                <div className="p-1.5 sm:p-3 bg-slate-900/60 rounded-lg border border-white/5 text-cyan-400"><RotateCcw size={20}/></div>
+             </div>
+             <p className="text-slate-500 text-[8px] sm:text-xs font-black uppercase tracking-wider mb-2">Zyklen (24h)</p>
+             <div className="flex justify-between items-end">
+                <div>
+                   <div className="text-lg sm:text-3xl font-black text-white">{cycleStats.starts}</div>
+                   <div className="text-[7px] sm:text-[9px] text-slate-500 uppercase font-bold">Starts</div>
+                </div>
+                <div className="w-px h-8 bg-white/5 mx-2"></div>
+                <div className="text-right">
+                   <div className="text-lg sm:text-3xl font-black text-orange-500">{cycleStats.defrosts}</div>
+                   <div className="text-[7px] sm:text-[9px] text-slate-500 uppercase font-bold text-orange-500/70">Abtauen</div>
+                </div>
+             </div>
+          </div>
+
           <StatCard title="Peak (24h)" value={currentWindowData.length > 0 ? Math.max(...currentWindowData.map(d => d.value)) : 0} unit="W" icon={<TrendingUp className="text-rose-400" />} color="rose" />
         </section>
 
@@ -247,8 +294,8 @@ const App = () => {
               ))}
             </div>
             <div className="flex gap-2 w-full sm:w-auto justify-end">
-               <NavBtn onClick={() => { setViewIndex(v => v + 1); setZoom(1); setPanOffset(0); }} icon={<ChevronLeft size={18}/>} label="-24h" />
-               <NavBtn onClick={() => { setViewIndex(v => v - 1); setZoom(1); setPanOffset(0); }} icon={<ChevronRight size={18}/>} label="+24h" active={viewIndex > 0} />
+                <NavBtn onClick={() => { setViewIndex(v => v + 1); setZoom(1); setPanOffset(0); }} icon={<ChevronLeft size={18}/>} label="-24h" />
+                <NavBtn onClick={() => { setViewIndex(v => v - 1); setZoom(1); setPanOffset(0); }} icon={<ChevronRight size={18}/>} label="+24h" active={viewIndex > 0} />
             </div>
           </div>
 
@@ -276,18 +323,27 @@ const App = () => {
                   </filter>
                 </defs>
                 <text transform={`translate(20, ${chartMetrics.height / 2}) rotate(-90)`} textAnchor="middle" className="text-[9px] fill-white/20 font-black uppercase tracking-[0.4em]">Leistung in Watt</text>
+                
                 {[0, 0.25, 0.5, 0.75, 1].map(p => (
                   <g key={p}>
                     <line x1={chartMetrics.margin.left} x2={chartMetrics.width - chartMetrics.margin.right} y1={chartMetrics.margin.top + chartMetrics.cH * (1-p)} y2={chartMetrics.margin.top + chartMetrics.cH * (1-p)} stroke="white" strokeOpacity="0.05" strokeWidth="1" />
                     <text x={chartMetrics.margin.left - 12} y={chartMetrics.margin.top + chartMetrics.cH * (1-p) + 4} textAnchor="end" className="text-[10px] sm:text-[12px] fill-slate-500 font-bold">{(chartMetrics.maxVal * p).toFixed(0)}</text>
                   </g>
                 ))}
+
+                {/* Markierung der Abtauvorgänge im Chart */}
+                {chartMetrics.defrostRects.map((r, idx) => (
+                    <rect key={idx} x={r.x} y={chartMetrics.margin.top} width={Math.max(5, r.width)} height={chartMetrics.cH} fill="#f97316" fillOpacity="0.2" />
+                ))}
+
                 <path d={chartMetrics.areaD} fill="url(#areaGrad)" />
                 <path d={chartMetrics.pathD} fill="none" stroke="#22d3ee" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" filter="url(#glow)" />
+                
                 <g filter="url(#glow)">
                   <line x1={chartMetrics.margin.left} x2={chartMetrics.width - chartMetrics.margin.right} y1={chartMetrics.avgY} y2={chartMetrics.avgY} stroke="#f59e0b" strokeWidth="3" strokeDasharray="10,5" />
                   <text x={chartMetrics.width - chartMetrics.margin.right} y={chartMetrics.avgY - 10} textAnchor="end" className="text-[9px] sm:text-[10px] fill-amber-400 font-black uppercase tracking-wider shadow-sm">Ø: {chartMetrics.avg.toFixed(0)} W</text>
                 </g>
+
                 {hoveredPoint && (
                   <g>
                     <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1={chartMetrics.margin.top} y2={chartMetrics.height - chartMetrics.margin.bottom} stroke="white" strokeOpacity="0.2" strokeWidth="1" />
@@ -317,7 +373,7 @@ const App = () => {
 
           <div className="px-3 sm:px-10 py-1 sm:py-4 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-1.5 sm:gap-4 text-center sm:text-left">
              <div className="flex items-center gap-2 text-[7px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest">
-                <Info size={12} className="text-cyan-500 shrink-0"/> Pinch zum Zoomen • Ziehen zum Bewegen
+                <Info size={12} className="text-cyan-500 shrink-0"/> Orange Balken markieren Abtauvorgänge • Pinch zum Zoomen
              </div>
              <div className="text-[8px] sm:text-xs font-black text-cyan-400 bg-cyan-400/5 px-2 py-0.5 rounded-full border border-cyan-400/20">
                {timeRangeLabel}
@@ -326,7 +382,7 @@ const App = () => {
         </div>
 
         <footer className="text-center pb-6 opacity-30">
-           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v4.3 • Premium Monitor</p>
+           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v4.4 • Premium Monitor</p>
         </footer>
       </div>
     </div>
@@ -338,13 +394,14 @@ const StatCard = ({ title, value, unit, icon, color, isStatus, trend }) => {
     rose: "from-rose-500/10 to-rose-950/5 border-rose-500/20",
     amber: "from-amber-500/10 to-amber-950/5 border-amber-500/20",
     cyan: "from-cyan-500/10 to-cyan-950/5 border-cyan-500/20",
-    emerald: "from-emerald-500/10 to-emerald-950/5 border-emerald-500/20"
+    emerald: "from-emerald-500/10 to-emerald-950/5 border-emerald-500/20",
+    orange: "from-orange-500/10 to-orange-950/5 border-orange-500/20"
   };
   return (
     <div className={`relative overflow-hidden bg-gradient-to-br ${colors[color]} border p-2.5 sm:p-6 rounded-[1rem] sm:rounded-[2rem] group transition-all shadow-xl`}>
       <div className="flex justify-between items-start mb-1.5 sm:mb-4">
         <div className="p-1.5 sm:p-3 bg-slate-900/60 rounded-lg border border-white/5">{icon}</div>
-        {isStatus && <div className={`flex items-center gap-1 bg-${color}-500/20 text-${color}-400 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase border border-${color}-500/20 tracking-tighter`}>{value}</div>}
+        {isStatus && <div className={`flex items-center gap-1 bg-${color === 'orange' ? 'orange' : color}-500/20 text-${color === 'orange' ? 'orange' : color}-400 px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase border border-${color === 'orange' ? 'orange' : color}-500/20 tracking-tighter`}>{value}</div>}
       </div>
       <p className="text-slate-500 text-[8px] sm:text-xs font-black uppercase tracking-wider mb-0.5 truncate">{title}</p>
       <div className="flex items-baseline gap-1 sm:gap-2">
