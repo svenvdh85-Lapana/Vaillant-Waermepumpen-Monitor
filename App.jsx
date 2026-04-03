@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 
 /**
- * Vaillant Premium Monitor - V4.4
- * Update: Integration der Abtauerkennung (Muster: Drop + Peak)
+ * Vaillant Premium Monitor - V4.6
+ * Fix: Bereinigte SVG-Gradienten-Attribute & Optimierte Abtauerkennung
  */
 
 const App = () => {
@@ -80,17 +80,18 @@ const App = () => {
 
   // --- Erweiterte Zyklen-Analyse (Starts & Abtauen) ---
   const cycleStats = useMemo(() => {
-    const stats = { starts: 0, defrosts: 0 };
+    const stats = { starts: 0, defrosts: 0, defrostIndices: [] };
     if (currentWindowData.length < 3) return stats;
 
     let idleMin = 0; 
     let compressorActive = false;
 
-    for (let i = 1; i < currentWindowData.length; i++) {
+    for (let i = 2; i < currentWindowData.length; i++) {
       const current = currentWindowData[i].value;
       const prev = currentWindowData[i - 1].value;
+      const prevPrev = currentWindowData[i - 2].value;
 
-      // 1. Reguläre Verdichterstarts (Deine Logik)
+      // 1. Reguläre Verdichterstarts
       if (current < 100) {
         idleMin++; 
         if (idleMin >= 15) compressorActive = false;
@@ -102,13 +103,14 @@ const App = () => {
         idleMin = 0;
       }
 
-      // 2. Abtauerkennung (Muster: Drop + Peak)
-      if (i < currentWindowData.length - 1) {
-        const next = currentWindowData[i + 1].value;
-        // Kriterium: Vorher Betrieb (>400), jetzt Einbruch (<300), danach massiver Peak (>2000)
-        if (prev > 400 && current < 300 && next > 2000) {
-          stats.defrosts++;
-        }
+      // 2. Verbesserte Abtauerkennung (Muster: Betrieb -> Drop -> Peak)
+      const isNormalBefore = prevPrev > 400;
+      const isDrop = prev < 350; 
+      const isMassivePeak = current > 1800;
+
+      if (isNormalBefore && isDrop && isMassivePeak) {
+        stats.defrosts++;
+        stats.defrostIndices.push(currentWindowData[i].id);
       }
     }
     return stats;
@@ -142,13 +144,14 @@ const App = () => {
     
     const points = visibleData.map((d, i) => ({ x: getX(i), y: getY(d.value), data: d }));
     
-    // Abtau-Regionen für den Chart berechnen
+    // Abtau-Regionen basierend auf global erkannten IDs
     const defrostRects = [];
-    for(let i = 1; i < visibleData.length - 1; i++) {
-        if (visibleData[i-1].value > 400 && visibleData[i].value < 300 && visibleData[i+1].value > 2000) {
-            defrostRects.push({ x: getX(i), width: getX(i+1) - getX(i) });
-        }
-    }
+    visibleData.forEach((d, i) => {
+      if (cycleStats.defrostIndices.includes(d.id)) {
+        const xPos = getX(i);
+        defrostRects.push({ x: xPos - 5, width: 10 });
+      }
+    });
 
     const avgY = getY(avg);
     let pathD = ""; let areaD = "";
@@ -158,7 +161,7 @@ const App = () => {
       areaD = `${pathD} L ${points[points.length - 1].x} ${margin.top + cH} L ${points[0].x} ${margin.top + cH} Z`;
     }
     return { points, pathD, areaD, margin, width, height, cW, cH, maxVal, visibleData, avg, avgY, defrostRects };
-  }, [currentWindowData, zoom, panOffset]);
+  }, [currentWindowData, zoom, panOffset, cycleStats.defrostIndices]);
 
   const timeIcons = useMemo(() => {
      if (!chartMetrics) return [];
@@ -251,7 +254,7 @@ const App = () => {
                 <Calendar size={12} className="text-cyan-500" /> 
                 {currentWindowData.length > 0 ? currentWindowData[0].time.toLocaleDateString() : '--'}
                 <div className="w-1 h-1 bg-cyan-500 rounded-full animate-pulse"></div>
-                Monitor V4.4
+                Monitor V4.6
               </div>
             </div>
           </div>
@@ -313,7 +316,7 @@ const App = () => {
             {chartMetrics && (
               <svg viewBox={`0 0 ${chartMetrics.width} ${chartMetrics.height}`} className="w-full h-full">
                 <defs>
-                  <linearGradient id="areaGrad" x1="0" x2="0" y1="0" y2="1">
+                  <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.4" />
                     <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
                   </linearGradient>
@@ -331,9 +334,9 @@ const App = () => {
                   </g>
                 ))}
 
-                {/* Markierung der Abtauvorgänge im Chart */}
+                {/* Markierung der Abtauvorgänge basierend auf erkannten IDs */}
                 {chartMetrics.defrostRects.map((r, idx) => (
-                    <rect key={idx} x={r.x} y={chartMetrics.margin.top} width={Math.max(5, r.width)} height={chartMetrics.cH} fill="#f97316" fillOpacity="0.2" />
+                    <rect key={idx} x={r.x} y={chartMetrics.margin.top} width={r.width} height={chartMetrics.cH} fill="#f97316" fillOpacity="0.3" filter="url(#glow)" />
                 ))}
 
                 <path d={chartMetrics.areaD} fill="url(#areaGrad)" />
@@ -373,7 +376,7 @@ const App = () => {
 
           <div className="px-3 sm:px-10 py-1 sm:py-4 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row justify-between items-center gap-1.5 sm:gap-4 text-center sm:text-left">
              <div className="flex items-center gap-2 text-[7px] sm:text-xs font-bold text-slate-500 uppercase tracking-widest">
-                <Info size={12} className="text-cyan-500 shrink-0"/> Orange Balken markieren Abtauvorgänge • Pinch zum Zoomen
+                <Info size={12} className="text-cyan-500 shrink-0"/> Orange Markierungen: Erkannte Abtauvorgänge • Pinch zum Zoomen
              </div>
              <div className="text-[8px] sm:text-xs font-black text-cyan-400 bg-cyan-400/5 px-2 py-0.5 rounded-full border border-cyan-400/20">
                {timeRangeLabel}
@@ -382,7 +385,7 @@ const App = () => {
         </div>
 
         <footer className="text-center pb-6 opacity-30">
-           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v4.4 • Premium Monitor</p>
+           <p className="text-slate-400 text-[9px] font-black uppercase tracking-[0.3em]">Vaillant Dashboard v4.6 • Premium Monitor</p>
         </footer>
       </div>
     </div>
